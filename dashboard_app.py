@@ -6,6 +6,7 @@ import plotly.express as px
 import numpy as np
 import os
 import json
+import requests
 from datetime import datetime
 from supabase import create_client, Client
 
@@ -231,7 +232,9 @@ israeli_stocks = {
     "KSM_SP500": {
         "qty": 23536.00,
         "default_price_ils": 3.16,
-        "yf_ticker": None,  # קרנות נאמנות לא זמינות ב-Yahoo Finance
+        "yf_ticker": None,
+        "funder_id": "5122957",  # קסם S&P 500 — משיכת מחיר מ-funder.co.il
+        "funder_divisor": 100,    # מחיר funder לחלק ב-100 = מחיר ליחידה
         "type": "Core",
         "name": "S&P 500 (₪)",
         "currency": "ILS"
@@ -292,6 +295,24 @@ def calc_atr(hist_df, period=14):
     if len(tr) < period:
         return sum(tr) / len(tr) if tr else None
     return sum(tr[-period:]) / period
+
+@st.cache_data(ttl=300)
+def get_funder_price(fund_id):
+    """משיכת מחיר קרן נאמנות מאתר funder.co.il"""
+    import re as _re
+    try:
+        r = requests.get(
+            f'https://www.funder.co.il/fund/{fund_id}',
+            headers={'User-Agent': 'Mozilla/5.0'},
+            timeout=15
+        )
+        if r.ok:
+            m = _re.search(r'"buyPrice":([\d.]+)', r.text)
+            if m:
+                return float(m.group(1))
+    except:
+        pass
+    return None
 
 @st.cache_data(ttl=300)
 def get_israeli_price(yf_ticker):
@@ -543,18 +564,28 @@ with tab1:
         
         sk = f"il_price_{ticker}"
         
-        # סדר עדיפויות: 1) מחיר שנשמר בקובץ 2) Yahoo Finance 3) ברירת מחדל
-        if ticker in saved_prices:
+        # סדר עדיפויות: 1) מחיר שנשמר בקובץ 2) funder.co.il 3) Yahoo Finance 4) ברירת מחדל
+        auto_price = None
+        # נסה funder.co.il
+        _funder_id = info.get('funder_id')
+        if _funder_id:
+            _funder_raw = get_funder_price(_funder_id)
+            if _funder_raw:
+                _divisor = info.get('funder_divisor', 1)
+                auto_price = _funder_raw / _divisor
+        # fallback ל-Yahoo Finance
+        if auto_price is None:
+            auto_price = get_israeli_price(info.get('yf_ticker'))
+
+        if auto_price:
+            initial_val = auto_price
+            source_label = " ✅"
+        elif ticker in saved_prices:
             initial_val = saved_prices[ticker]
             source_label = " ✏️"
         else:
-            auto_price = get_israeli_price(info.get('yf_ticker'))
-            if auto_price:
-                initial_val = auto_price
-                source_label = " ✅"
-            else:
-                initial_val = info['default_price_ils']
-                source_label = " (ידני)"
+            initial_val = info['default_price_ils']
+            source_label = " (ידני)"
         
         il_prices[ticker] = st.sidebar.number_input(
             f"💰 {info['name']}{source_label}",
