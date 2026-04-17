@@ -296,9 +296,26 @@ def calc_atr(hist_df, period=14):
         return sum(tr) / len(tr) if tr else None
     return sum(tr[-period:]) / period
 
-@st.cache_data(ttl=300)
+def _funder_cache_ttl():
+    """מחשב TTL דינמי לפאנדר — רענון פעם ביום, שעתיים אחרי פתיחת מסחר (12:00 IST)"""
+    from datetime import timedelta
+    import pytz
+    now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
+    israel_tz = pytz.timezone('Asia/Jerusalem')
+    now_il = now_utc.astimezone(israel_tz)
+    # מועד הרענון הבא: 12:00 ישראל (שעתיים אחרי פתיחת מסחר)
+    refresh_today = now_il.replace(hour=12, minute=0, second=0, microsecond=0)
+    if now_il >= refresh_today:
+        # כבר עבר 12:00 היום — הרענון הבא מחר ב-12:00
+        next_refresh = refresh_today + timedelta(days=1)
+    else:
+        next_refresh = refresh_today
+    ttl_seconds = max(int((next_refresh - now_il).total_seconds()), 60)
+    return ttl_seconds
+
+@st.cache_data(ttl=_funder_cache_ttl())
 def get_funder_price(fund_id):
-    """משיכת מחיר קרן נאמנות מאתר funder.co.il"""
+    """משיכת מחיר קרן נאמנות מאתר funder.co.il — פעם ביום"""
     import re as _re
     try:
         r = requests.get(
@@ -550,7 +567,7 @@ with tab1:
     if _total_deposited_ils > 0:
         st.sidebar.caption(f"💰 סה״כ הופקד: ₪{_total_deposited_ils:,.0f}")
     
-    st.sidebar.caption("מחירי קרנות ישראליות (עדכון ידני):")
+    st.sidebar.caption("מחירי קרנות ישראליות:")
     
     # --- שמירת מחירים לקובץ JSON כדי ששום rerun לא ימחק אותם ---
     saved_prices = db.get_il_prices()
@@ -562,20 +579,25 @@ with tab1:
             il_prices[ticker] = info['default_price_ils']
             continue
         
-        sk = f"il_price_{ticker}"
-        
-        # סדר עדיפויות: 1) מחיר שנשמר בקובץ 2) funder.co.il 3) Yahoo Finance 4) ברירת מחדל
-        auto_price = None
-        # נסה funder.co.il
+        # --- נכסים עם funder_id — מחיר אוטומטי, בלי input ידני ---
         _funder_id = info.get('funder_id')
         if _funder_id:
             _funder_raw = get_funder_price(_funder_id)
             if _funder_raw:
                 _divisor = info.get('funder_divisor', 1)
                 auto_price = _funder_raw / _divisor
-        # fallback ל-Yahoo Finance
-        if auto_price is None:
-            auto_price = get_israeli_price(info.get('yf_ticker'))
+                il_prices[ticker] = auto_price
+                st.sidebar.caption(f"💰 {info['name']} ✅ ₪{auto_price:.2f}")
+            else:
+                # fallback — מחיר שמור או ברירת מחדל
+                il_prices[ticker] = saved_prices.get(ticker, info['default_price_ils'])
+                st.sidebar.caption(f"💰 {info['name']} ⚠️ ₪{il_prices[ticker]:.2f} (לא עודכן)")
+            continue
+        
+        sk = f"il_price_{ticker}"
+        
+        # סדר עדיפויות: 1) Yahoo Finance 2) מחיר שנשמר 3) ברירת מחדל
+        auto_price = get_israeli_price(info.get('yf_ticker'))
 
         if auto_price:
             initial_val = auto_price
@@ -725,7 +747,9 @@ with tab1:
         st.success(f"✅ נטענו {len(df)} נכסים בהצלחה מתוך {total_assets} | שער USD/ILS: ₪{usd_to_ils:.3f}")
         
         if israeli_stocks:
-            st.info(f"ℹ️ {len(israeli_stocks)} מניות ישראליות עם מחירים ידניים - עדכן בקוד בשורה 31")
+            _manual_count = sum(1 for _v in israeli_stocks.values() if not _v.get('funder_id') and _v.get('currency') != 'USD' and not _v.get('yf_ticker'))
+            if _manual_count > 0:
+                st.info(f"ℹ️ {_manual_count} נכסים ישראליים עם מחירים ידניים")
 
         # Baseline tracking — מבוסס על שווי השקעות בלבד (ללא מזומן) כדי שהוספת מזומן לא תיראה כרווח
         today = datetime.now().strftime('%Y-%m-%d')
