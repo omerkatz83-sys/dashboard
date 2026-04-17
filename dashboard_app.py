@@ -535,6 +535,7 @@ with tab1:
     saved_prices = db.get_il_prices()
     
     il_prices = {}
+    _il_prices_changed = False
     for ticker, info in israeli_stocks.items():
         if info.get('currency') == 'USD' or ticker in ('CASH_USD', 'CASH_ILS'):
             il_prices[ticker] = info['default_price_ils']
@@ -565,11 +566,18 @@ with tab1:
             help=f"כמות: {info['qty']:.2f} | ברירת מחדל: ₪{info['default_price_ils']:.2f}"
         )
         
-        # שמור לקובץ אם המשתמש שינה את הערך
-        saved_prices[ticker] = il_prices[ticker]
+        # שמור רק אם המשתמש שינה את הערך בפועל
+        if abs(il_prices[ticker] - initial_val) > 0.001:
+            saved_prices[ticker] = il_prices[ticker]
+            _il_prices_changed = True
+        elif ticker not in saved_prices:
+            # טיקר חדש שלא היה ב-DB — שמור את הערך הראשוני
+            saved_prices[ticker] = il_prices[ticker]
+            _il_prices_changed = True
     
-    # שמור את כל המחירים לקובץ
-    db.save_il_prices(saved_prices)
+    # שמור רק אם משהו השתנה
+    if _il_prices_changed:
+        db.save_il_prices(saved_prices)
 
     # כפתור רענון
     col_refresh, col_empty = st.columns([1, 4])
