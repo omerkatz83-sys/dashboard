@@ -1068,8 +1068,15 @@ with tab1:
                 if isinstance(_sv, (int, float)):
                     active_stops[_sk] = {"stop_price": _sv, "currency": "USD"}
             
+            # סנכרן סטופים חדשים מ-default שלא קיימים ב-DB
+            _sync_needed = False
+            for _dk, _dv in default_stop_orders.items():
+                if _dk not in active_stops:
+                    active_stops[_dk] = _dv
+                    _sync_needed = True
+            
             # אם אין קובץ — שמור את ברירות המחדל
-            if not db.stop_orders_file_exists():
+            if not db.stop_orders_file_exists() or _sync_needed:
                 db.save_stop_orders(active_stops)
             
             # בנה מיפוי של כל הנכסים (US + ישראליים) עם מחירים נוכחיים
