@@ -1137,9 +1137,16 @@ with tab1:
             
             # בדוק כל פקודה פעילה מול מחיר נוכחי + Low של היום
             newly_executed = []
+            _today_str = datetime.now().strftime('%Y-%m-%d')
             for ticker_s, stop_info in list(active_stops.items()):
                 if ticker_s not in all_assets:
                     continue
+
+                # ביום הרכישה עצמו — לא בודקים סטופ (הLow יכול להיות לפני הקנייה)
+                _purchase_date = cost_basis.get(ticker_s, {}).get('date', '')
+                if _purchase_date == _today_str:
+                    continue
+
                 asset = all_assets[ticker_s]
                 stop_price = stop_info['stop_price']
                 stop_currency = stop_info.get('currency', 'USD')
