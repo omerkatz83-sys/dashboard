@@ -399,9 +399,15 @@ def get_data(portfolio):
                 errors.append(f"{ticker}: אין נתונים היסטוריים")
                 continue
             
+            # הסרת שורות עם NaN ב-Close (למשל כשהשוק עדיין פתוח)
+            hist_clean = hist.dropna(subset=['Close'])
+            if hist_clean.empty:
+                errors.append(f"{ticker}: אין נתוני מחיר תקפים")
+                continue
+            
             history_dict[ticker] = hist
-            price = float(hist['Close'].iloc[-1])
-            prev_close = float(hist['Close'].iloc[-2]) if len(hist) > 1 else price
+            price = float(hist_clean['Close'].iloc[-1])
+            prev_close = float(hist_clean['Close'].iloc[-2]) if len(hist_clean) > 1 else price
             
             # אם מניה נקנתה היום — נשתמש במחיר הקנייה כ-Prev Close
             cb = cost_basis.get(ticker)
