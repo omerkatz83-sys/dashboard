@@ -19,6 +19,7 @@ portfolio = {
     "COIN": {"qty": 9, "type": "Crypto", "name": "Coinbase"},
     "FBTC": {"qty": 37, "type": "Crypto", "name": "Fidelity Bitcoin"},
     "ETH": {"qty": 72, "type": "Crypto", "name": "Grayscale Ethereum Mini Trust"},
+    "MSFT": {"qty": 7, "type": "Satellite", "name": "Microsoft"},
 }
 
 # --- מחירי רכישה (Cost Basis) למניה ---
@@ -31,6 +32,7 @@ cost_basis = {
     "COIN":         {"price": 385.60, "currency": "USD", "date": "2025-12-01"},
     "FBTC":         {"price": 98.02,  "currency": "USD", "date": "2025-12-01"},
     "ETH":          {"price": 40.26,  "currency": "USD", "date": "2025-12-01"},
+    "MSFT":         {"price": 419.40, "currency": "USD", "date": "2026-04-17"},
     "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2025-12-01"},
 }
 
@@ -222,6 +224,7 @@ default_stop_orders = {
     "AMD":   {"stop_price": 210.00, "currency": "USD"},
     "IEFA":  {"stop_price": 88.50,  "currency": "USD"},
     "IEMG":  {"stop_price": 67.50,  "currency": "USD"},
+    "MSFT":  {"stop_price": 414.00, "currency": "USD"},
 }
 
 israeli_stocks = {
@@ -234,7 +237,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 19309.00,
+        "qty": 16373.20,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
