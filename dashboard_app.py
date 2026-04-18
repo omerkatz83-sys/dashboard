@@ -999,8 +999,8 @@ with tab1:
         
         # מילוי הרווח הכולל בראש הדף
         _pnl_placeholder.metric(
-            "רווח כולל ($)",
-            f"${total_pnl:+,.2f}",
+            "רווח כולל",
+            f"${total_pnl:+,.2f} ({total_pnl_pct:+.2f}%)",
             delta=f"{total_pnl_pct:+.2f}%"
         )
         
