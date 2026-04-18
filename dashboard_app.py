@@ -774,16 +774,9 @@ with tab1:
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("שווי תיק כולל ($)", f"${total_value:,.2f}")
         col2.metric("שווי תיק כולל (₪)", f"₪{total_value_ils:,.2f}")
-        col3.metric(
-            f"שינוי מ-{baseline_date} (ללא מזומן)",
-            f"{pct_change:+.2f}% | {ils_change:+,.0f}₪",
-            delta=f"{pct_change:.2f}% | {ils_change:+,.0f}₪"
-        )
         
-        if st.button("🔄 אפס נקודת בסיס להיום"):
-            db.save_baseline({'invested_value': total_invested, 'date': today})
-            st.success(f"✅ ערך הבסיס עודכן ל-${total_invested:,.2f} (השקעות בלבד) בתאריך {today}")
-            st.rerun()
+        # רווח כולל ($) — יחושב אחרי חישוב cost basis, כאן placeholder
+        _pnl_placeholder = col3.empty()
         
         col4.metric("מספר פוזיציות", len(df))
 
@@ -1003,6 +996,13 @@ with tab1:
             lambda row: row['Cost Basis'] * row['Quantity'] if row['Cost Basis'] and row['Cost Basis'] > 0 else 0, axis=1
         ).sum()
         total_pnl_pct = (total_pnl / total_cost * 100) if total_cost > 0 else 0
+        
+        # מילוי הרווח הכולל בראש הדף
+        _pnl_placeholder.metric(
+            "רווח כולל ($)",
+            f"${total_pnl:+,.2f}",
+            delta=f"{total_pnl_pct:+.2f}%"
+        )
         
         # --- רווח/הפסד יומי (Daily P&L) — ללא מזומן ---
         # prev close → current price, מתאפס כל יום אחרי סוף מסחר
