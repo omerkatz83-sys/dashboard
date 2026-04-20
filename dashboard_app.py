@@ -22,6 +22,7 @@ portfolio = {
     "ETH": {"qty": 72, "type": "Crypto", "name": "Grayscale Ethereum Mini Trust"},
     "MSFT": {"qty": 7, "type": "Satellite", "name": "Microsoft"},
     "KRE": {"qty": 45, "type": "Satellite", "name": "SPDR Regional Banking"},
+    "ONDS": {"qty": 200, "type": "Satellite", "name": "Onds"},
 }
 
 # --- מחירי רכישה (Cost Basis) למניה ---
@@ -36,6 +37,7 @@ cost_basis = {
     "ETH":          {"price": 40.26,  "currency": "USD", "date": "2025-12-01"},
     "MSFT":         {"price": 419.40, "currency": "USD", "date": "2026-04-17"},
     "KRE":          {"price": 70.80,  "currency": "USD", "date": "2026-04-20"},
+    "ONDS":         {"price": 10.75,  "currency": "USD", "date": "2026-04-20"},
     "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2025-12-01"},
 }
 
@@ -229,6 +231,7 @@ default_stop_orders = {
     "IEMG":  {"stop_price": 67.50,  "currency": "USD"},
     "MSFT":  {"stop_price": 414.00, "currency": "USD"},
     "KRE":   {"stop_price": 69.00,  "currency": "USD"},
+    "ONDS":  {"stop_price": 10.30,  "currency": "USD"},
 }
 
 israeli_stocks = {
@@ -243,7 +246,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 13182.30,
+        "qty": 11027.40,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
