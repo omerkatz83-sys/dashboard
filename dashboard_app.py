@@ -21,6 +21,7 @@ portfolio = {
     "FBTC": {"qty": 37, "type": "Crypto", "name": "Fidelity Bitcoin"},
     "ETH": {"qty": 72, "type": "Crypto", "name": "Grayscale Ethereum Mini Trust"},
     "MSFT": {"qty": 7, "type": "Satellite", "name": "Microsoft"},
+    "KRE": {"qty": 45, "type": "Satellite", "name": "SPDR Regional Banking"},
 }
 
 # --- מחירי רכישה (Cost Basis) למניה ---
@@ -34,6 +35,7 @@ cost_basis = {
     "FBTC":         {"price": 98.02,  "currency": "USD", "date": "2025-12-01"},
     "ETH":          {"price": 40.26,  "currency": "USD", "date": "2025-12-01"},
     "MSFT":         {"price": 419.40, "currency": "USD", "date": "2026-04-17"},
+    "KRE":          {"price": 70.80,  "currency": "USD", "date": "2026-04-20"},
     "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2025-12-01"},
 }
 
@@ -226,6 +228,7 @@ default_stop_orders = {
     "IEFA":  {"stop_price": 88.50,  "currency": "USD"},
     "IEMG":  {"stop_price": 67.50,  "currency": "USD"},
     "MSFT":  {"stop_price": 414.00, "currency": "USD"},
+    "KRE":   {"stop_price": 69.00,  "currency": "USD"},
 }
 
 israeli_stocks = {
@@ -240,7 +243,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 16373.20,
+        "qty": 13182.30,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
@@ -1517,18 +1520,16 @@ with tab1:
                     if hist_rows:
                         st.dataframe(pd.DataFrame(hist_rows), hide_index=True, use_container_width=True)
                         
-                        # סיכום כולל — הפרדה בין דולר לשקל
+                        # סיכום כולל — רווח/הפסד ממומש בלבד
                         _pnl_color_usd = "🟢" if total_realized_pnl_usd >= 0 else "🔴"
-                        hc1, hc2, hc3 = st.columns(3)
-                        hc1.metric("💰 סה״כ תמורה ($)", f"${total_proceeds_usd:,.2f}")
-                        hc2.metric(f"{_pnl_color_usd} רווח/הפסד ממומש ($)", f"${total_realized_pnl_usd:+,.2f}")
-                        hc3.metric("📊 עסקאות", f"{len(executed_history)}")
-                        if total_proceeds_ils > 0:
+                        hc1, hc2 = st.columns(2)
+                        hc1.metric(f"{_pnl_color_usd} רווח/הפסד ממומש ($)", f"${total_realized_pnl_usd:+,.2f}")
+                        hc2.metric("📊 עסקאות", f"{len(executed_history)}")
+                        if total_realized_pnl_ils != 0:
                             _pnl_color_ils = "🟢" if total_realized_pnl_ils >= 0 else "🔴"
-                            hc4, hc5, hc6 = st.columns(3)
-                            hc4.metric("💰 סה״כ תמורה (₪)", f"₪{total_proceeds_ils:,.2f}")
-                            hc5.metric(f"{_pnl_color_ils} רווח/הפסד ממומש (₪)", f"₪{total_realized_pnl_ils:+,.2f}")
-                            hc6.metric("", "")
+                            hc3, hc4 = st.columns(2)
+                            hc3.metric(f"{_pnl_color_ils} רווח/הפסד ממומש (₪)", f"₪{total_realized_pnl_ils:+,.2f}")
+                            hc4.metric("", "")
         except Exception as e:
             st.error(f"⚠️ שגיאה בסקציית סטופ: {e}")
         
