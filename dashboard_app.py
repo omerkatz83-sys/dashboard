@@ -666,10 +666,6 @@ with tab1:
             if ticker == 'CASH_USD' and extra_cash_ils > 0:
                 extra_usd = extra_cash_ils / usd_to_ils
                 qty = qty + extra_usd
-            if ticker == 'CASH_USD' and _extra_cash_usd != 0:
-                qty = qty + _extra_cash_usd
-            if ticker == 'CASH_ILS' and _extra_cash_ils != 0:
-                qty = qty + _extra_cash_ils
             
             if info.get('currency') == 'USD':
                 price_usd = price_ils
