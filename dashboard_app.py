@@ -23,6 +23,7 @@ portfolio = {
     "MSFT": {"qty": 7, "type": "Satellite", "name": "Microsoft"},
     "KRE": {"qty": 45, "type": "Satellite", "name": "SPDR Regional Banking"},
     "ONDS": {"qty": 200, "type": "Satellite", "name": "Onds"},
+    "BWXT": {"qty": 12, "type": "Satellite", "name": "BWX Technologies"},
 }
 
 # --- מחירי רכישה (Cost Basis) למניה ---
@@ -38,6 +39,7 @@ cost_basis = {
     "MSFT":         {"price": 419.40, "currency": "USD", "date": "2026-04-17"},
     "KRE":          {"price": 70.80,  "currency": "USD", "date": "2026-04-20"},
     "ONDS":         {"price": 10.75,  "currency": "USD", "date": "2026-04-20"},
+    "BWXT":         {"price": 224.79, "currency": "USD", "date": "2026-04-23"},
     "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2025-12-01"},
 }
 
@@ -232,6 +234,7 @@ default_stop_orders = {
     "MSFT":  {"stop_price": 414.00, "currency": "USD"},
     "KRE":   {"stop_price": 69.00,  "currency": "USD"},
     "ONDS":  {"stop_price": 10.30,  "currency": "USD"},
+    "BWXT":  {"stop_price": 218.00, "currency": "USD"},
 }
 
 israeli_stocks = {
@@ -246,7 +249,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 11027.40,
+        "qty": 8325.02,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
