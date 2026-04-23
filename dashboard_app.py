@@ -10,6 +10,8 @@ import requests
 from datetime import datetime
 from supabase import create_client, Client
 
+TRADE_COMMISSION_USD = 4.90
+
 # --- הגדרת התיק (מחוץ לטאבים - משותף לכולם) ---
 portfolio = {
     "VUAA.L": {"qty": 190, "type": "Core", "name": "S&P 500"},
@@ -270,6 +272,7 @@ for _sold in _sold_stocks:
     _sold_qty = _sold.get('qty', 0)
     _sold_profit = (_sold.get('sale_price', 0) - _sold_cost) * _sold_qty
     _sold_tax = max(0, _sold_profit * 0.25)
+    _sold_commission_usd = _sold.get('commission_usd', TRADE_COMMISSION_USD)
     _sold_net = _sold_proceeds - _sold_tax
     # הסר מ-portfolio (US stocks)
     if _t in portfolio:
@@ -283,11 +286,9 @@ for _sold in _sold_stocks:
     # צבור תמורה למזומן (אחרי ניכוי 25% מס רווח הון)
     if _sold_cur == 'ILS':
         _extra_cash_ils += _sold_net
+        _extra_cash_usd -= _sold_commission_usd
     else:
-        _extra_cash_usd += _sold_net
-
-# המזומן כבר מוגדר כסכום סופי — אין צורך להוסיף תמורות מכירה
-# (הערכים ב-CASH_USD ו-CASH_ILS כבר כוללים הכל)
+        _extra_cash_usd += (_sold_net - _sold_commission_usd)
 
 # --- פונקציות (מחוץ לטאבים - משותף לכולם) ---
 
@@ -665,6 +666,10 @@ with tab1:
             if ticker == 'CASH_USD' and extra_cash_ils > 0:
                 extra_usd = extra_cash_ils / usd_to_ils
                 qty = qty + extra_usd
+            if ticker == 'CASH_USD' and _extra_cash_usd != 0:
+                qty = qty + _extra_cash_usd
+            if ticker == 'CASH_ILS' and _extra_cash_ils != 0:
+                qty = qty + _extra_cash_ils
             
             if info.get('currency') == 'USD':
                 price_usd = price_ils
@@ -1325,6 +1330,7 @@ with tab1:
                             'sale_price': actual_price,
                             'proceeds': actual_proceeds,
                             'cost_per_share': _cost_per,
+                            'commission_usd': TRADE_COMMISSION_USD,
                             'currency': ex['currency'],
                             'date': datetime.now().strftime('%Y-%m-%d %H:%M')
                         }
