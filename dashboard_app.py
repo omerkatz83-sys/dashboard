@@ -465,8 +465,26 @@ def get_data(portfolio):
                 continue
             
             history_dict[ticker] = hist
-            price = float(hist_clean['Close'].iloc[-1])
-            prev_close = float(hist_clean['Close'].iloc[-2]) if len(hist_clean) > 1 else price
+
+            # מחיר נוכחי ו-Low של היום: שלוף נתוני intraday (5 דקות) לנר המדויק ביותר
+            try:
+                intraday = stock.history(period="1d", interval="5m")
+                if not intraday.empty:
+                    intraday_clean = intraday.dropna(subset=['Close'])
+                    if not intraday_clean.empty:
+                        price = float(intraday_clean['Close'].iloc[-1])
+                        _today_intraday_low = float(intraday_clean['Low'].min())
+                        history_dict[f"{ticker}__intraday_low"] = _today_intraday_low
+                    else:
+                        price = float(hist_clean['Close'].iloc[-1])
+                else:
+                    price = float(hist_clean['Close'].iloc[-1])
+            except Exception:
+                price = float(hist_clean['Close'].iloc[-1])
+
+            prev_close = float(hist_clean['Close'].iloc[-1]) if len(hist_clean) > 0 else price
+            if len(hist_clean) > 1:
+                prev_close = float(hist_clean['Close'].iloc[-2])
             
             # אם מניה נקנתה היום — נשתמש במחיר הקנייה כ-Prev Close
             cb = cost_basis.get(ticker)
@@ -1193,9 +1211,11 @@ with tab1:
             for ticker_s, info_s in portfolio.items():
                 row = df[df['Ticker'] == ticker_s]
                 if not row.empty:
-                    # שלוף את ה-Low של היום מה-history_data (אם קיים)
+                    # שלוף את ה-Low של היום מה-intraday data (מדויק יותר מנר יומי)
                     _today_low = None
-                    if ticker_s in history_data and not history_data[ticker_s].empty:
+                    if f"{ticker_s}__intraday_low" in history_data:
+                        _today_low = history_data[f"{ticker_s}__intraday_low"]
+                    elif ticker_s in history_data and not history_data[ticker_s].empty:
                         _today_low = float(history_data[ticker_s]['Low'].iloc[-1])
                     all_assets[ticker_s] = {
                         'name': info_s['name'],
