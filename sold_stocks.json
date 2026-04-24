@@ -1,0 +1,14 @@
+[
+  {
+    "ticker": "KRE",
+    "name": "SPDR Regional Banking",
+    "qty": 45.0,
+    "stop_price": 69.0,
+    "sale_price": 68.9,
+    "proceeds": 3095.6,
+    "cost_per_share": 70.8,
+    "commission_usd": 4.9,
+    "currency": "USD",
+    "date": "2026-04-24 00:00"
+  }
+]

@@ -23,7 +23,7 @@ portfolio = {
     "FBTC": {"qty": 37, "type": "Crypto", "name": "Fidelity Bitcoin"},
     "ETH": {"qty": 72, "type": "Crypto", "name": "Grayscale Ethereum Mini Trust"},
     "MSFT": {"qty": 7, "type": "Satellite", "name": "Microsoft"},
-    "KRE": {"qty": 45, "type": "Satellite", "name": "SPDR Regional Banking"},
+
     "ONDS": {"qty": 200, "type": "Satellite", "name": "Onds"},
     "BWXT": {"qty": 12, "type": "Satellite", "name": "BWX Technologies"},
 }
@@ -39,7 +39,7 @@ cost_basis = {
     "FBTC":         {"price": 98.02,  "currency": "USD", "date": "2025-12-01"},
     "ETH":          {"price": 40.26,  "currency": "USD", "date": "2025-12-01"},
     "MSFT":         {"price": 419.40, "currency": "USD", "date": "2026-04-17"},
-    "KRE":          {"price": 70.80,  "currency": "USD", "date": "2026-04-20"},
+
     "ONDS":         {"price": 10.75,  "currency": "USD", "date": "2026-04-20"},
     "BWXT":         {"price": 224.79, "currency": "USD", "date": "2026-04-23"},
     "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2025-12-01"},
@@ -234,7 +234,7 @@ default_stop_orders = {
     "IEFA":  {"stop_price": 88.50,  "currency": "USD"},
     "IEMG":  {"stop_price": 67.50,  "currency": "USD"},
     "MSFT":  {"stop_price": 414.00, "currency": "USD"},
-    "KRE":   {"stop_price": 69.00,  "currency": "USD"},
+
     "ONDS":  {"stop_price": 10.30,  "currency": "USD"},
     "BWXT":  {"stop_price": 218.00, "currency": "USD"},
 }
