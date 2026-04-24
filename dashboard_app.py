@@ -323,9 +323,8 @@ def _funder_cache_ttl():
     ttl_seconds = max(int((next_refresh - now_il).total_seconds()), 60)
     return ttl_seconds
 
-@st.cache_data(ttl=_funder_cache_ttl())
 def get_funder_price(fund_id):
-    """משיכת מחיר קרן נאמנות מאתר funder.co.il — פעם ביום"""
+    """משיכת מחיר קרן נאמנות מאתר funder.co.il"""
     import re as _re
     try:
         r = requests.get(
@@ -340,6 +339,15 @@ def get_funder_price(fund_id):
     except:
         pass
     return None
+
+def _funder_target_refresh_date():
+    """תאריך היעד לעדכון: אחרי 12:00 ישראל - היום, לפני כן - אתמול."""
+    from datetime import timedelta
+    import pytz
+    now_il = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(pytz.timezone('Asia/Jerusalem'))
+    if now_il.hour >= 12:
+        return now_il.strftime('%Y-%m-%d')
+    return (now_il - timedelta(days=1)).strftime('%Y-%m-%d')
 
 @st.cache_data(ttl=300)
 def get_israeli_price(yf_ticker):
@@ -592,15 +600,25 @@ with tab1:
         # --- נכסים עם funder_id — מחיר אוטומטי, בלי input ידני ---
         _funder_id = info.get('funder_id')
         if _funder_id:
-            _funder_raw = get_funder_price(_funder_id)
-            if _funder_raw:
-                _divisor = info.get('funder_divisor', 1)
-                auto_price = _funder_raw / _divisor
-                il_prices[ticker] = auto_price
-                st.sidebar.caption(f"💰 {info['name']} ✅ ₪{auto_price:.2f}")
+            _marker_key = f"__funder_last_update__{ticker}"
+            _target_date = _funder_target_refresh_date()
+            _needs_refresh = saved_prices.get(_marker_key) != _target_date
+
+            # רענון פעם ביום לפי תאריך היעד
+            if _needs_refresh:
+                _funder_raw = get_funder_price(_funder_id)
+                if _funder_raw:
+                    _divisor = info.get('funder_divisor', 1)
+                    auto_price = _funder_raw / _divisor
+                    saved_prices[ticker] = auto_price
+                    saved_prices[_marker_key] = _target_date
+                    _il_prices_changed = True
+
+            if ticker in saved_prices:
+                il_prices[ticker] = saved_prices[ticker]
+                st.sidebar.caption(f"💰 {info['name']} ✅ ₪{il_prices[ticker]:.2f}")
             else:
-                # fallback — מחיר שמור או ברירת מחדל
-                il_prices[ticker] = saved_prices.get(ticker, info['default_price_ils'])
+                il_prices[ticker] = info['default_price_ils']
                 st.sidebar.caption(f"💰 {info['name']} ⚠️ ₪{il_prices[ticker]:.2f} (לא עודכן)")
             continue
         
