@@ -466,15 +466,15 @@ def get_data(portfolio):
             
             history_dict[ticker] = hist
 
-            # מחיר נוכחי ו-Low של היום: שלוף נתוני intraday (5 דקות) לנר המדויק ביותר
+            # מחיר נוכחי ו-Low intraday: שלוף נרות 5 דקות — מדויק יותר מנר יומי
             try:
                 intraday = stock.history(period="1d", interval="5m")
                 if not intraday.empty:
                     intraday_clean = intraday.dropna(subset=['Close'])
                     if not intraday_clean.empty:
                         price = float(intraday_clean['Close'].iloc[-1])
-                        _today_intraday_low = float(intraday_clean['Low'].min())
-                        history_dict[f"{ticker}__intraday_low"] = _today_intraday_low
+                        # שמור את ה-DataFrame המלא לסינון לפי חותמת זמן בבדיקות סטופ
+                        history_dict[f"{ticker}__intraday"] = intraday_clean
                     else:
                         price = float(hist_clean['Close'].iloc[-1])
                 else:
@@ -1184,23 +1184,27 @@ with tab1:
                     active_stops[_dk] = _dv
                     _sync_needed = True
 
-            # מיגרציה רטרואקטיבית: סטופים שעודכנו ידנית בעבר ואין להם check_from_date
-            # יקבלו חסימה עד מחר כדי למנוע טריגר שווא מ-Low שהיה לפני עדכון הסטופ.
+            # מיגרציה: המר check_from_date ישן ל-check_from_ts (חותמת זמן UTC מלאה).
+            # סטופים שעודכנו ידנית ואין להם check_from_ts יקבלו ts=עכשיו,
+            # כך שרק נרות מרגע זה ואילך יבדקו ל-Low.
             _retrofit_needed = False
-            _tomorrow_str = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+            _now_utc_str = datetime.utcnow().isoformat()
             for _tk, _sv in list(active_stops.items()):
-                if _tk not in default_stop_orders:
-                    continue
                 if not isinstance(_sv, dict):
                     continue
-                if _sv.get('check_from_date') or _sv.get('low_check_from_date'):
-                    continue
-                _def_sp = default_stop_orders[_tk].get('stop_price')
-                _cur_sp = _sv.get('stop_price')
-                # הסטופ השתנה ידנית ביחס לברירת מחדל, אבל אין חותמת זמן
-                if _def_sp is not None and _cur_sp is not None and float(_cur_sp) != float(_def_sp):
-                    active_stops[_tk]['check_from_date'] = _tomorrow_str
+                # הסר שדות ישנים של גרסאות קודמות
+                _had_old = 'check_from_date' in _sv or 'low_check_from_date' in _sv
+                _sv.pop('check_from_date', None)
+                _sv.pop('low_check_from_date', None)
+                if _had_old:
                     _retrofit_needed = True
+                # אם הסטופ שונה מברירת המחדל ואין לו check_from_ts — צור אחד עכשיו
+                if _tk in default_stop_orders and not _sv.get('check_from_ts'):
+                    _def_sp = default_stop_orders[_tk].get('stop_price')
+                    _cur_sp = _sv.get('stop_price')
+                    if _def_sp is not None and _cur_sp is not None and float(_cur_sp) != float(_def_sp):
+                        active_stops[_tk]['check_from_ts'] = _now_utc_str
+                        _retrofit_needed = True
             
             # אם אין קובץ — שמור את ברירות המחדל
             if not db.stop_orders_file_exists() or _sync_needed or _retrofit_needed:
@@ -1211,17 +1215,10 @@ with tab1:
             for ticker_s, info_s in portfolio.items():
                 row = df[df['Ticker'] == ticker_s]
                 if not row.empty:
-                    # שלוף את ה-Low של היום מה-intraday data (מדויק יותר מנר יומי)
-                    _today_low = None
-                    if f"{ticker_s}__intraday_low" in history_data:
-                        _today_low = history_data[f"{ticker_s}__intraday_low"]
-                    elif ticker_s in history_data and not history_data[ticker_s].empty:
-                        _today_low = float(history_data[ticker_s]['Low'].iloc[-1])
                     all_assets[ticker_s] = {
                         'name': info_s['name'],
                         'qty': float(info_s['qty']),
                         'current_price': float(row.iloc[0]['Price']),
-                        'today_low': _today_low,
                         'currency': 'USD'
                     }
             for ticker_s, info_s in israeli_stocks.items():
@@ -1260,22 +1257,22 @@ with tab1:
                     new_stop = round(new_hwm * (1 - trail_pct / 100), 2)
                     active_stops[ticker_s]['high_watermark'] = round(new_hwm, 2)
                     active_stops[ticker_s]['stop_price'] = new_stop
-                    # אחרי העלאת סטופ, בדיקת טריגר תתחיל רק מהיום הבא
+                    # אחרי העלאת סטופ, בדיקת Low תתחיל רק מנרות שאחרי חותמת הזמן הנוכחית
                     if old_stop is None or new_stop != old_stop:
-                        active_stops[ticker_s]['check_from_date'] = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+                        active_stops[ticker_s]['check_from_ts'] = datetime.utcnow().isoformat()
                     _trailing_updated = True
             
             if _trailing_updated:
                 db.save_stop_orders(active_stops)
             
-            # בדוק כל פקודה פעילה מול מחיר נוכחי + Low של היום
+            # בדוק כל פקודה פעילה מול מחיר נוכחי + Low intraday מסונן לפי שעת עדכון הסטופ
             newly_executed = []
             _today_str = datetime.now().strftime('%Y-%m-%d')
             for ticker_s, stop_info in list(active_stops.items()):
                 if ticker_s not in all_assets:
                     continue
 
-                # ביום הרכישה עצמו — לא בודקים סטופ (הLow יכול להיות לפני הקנייה)
+                # ביום הרכישה עצמו — לא בודקים סטופ
                 _purchase_date = cost_basis.get(ticker_s, {}).get('date', '')
                 if _purchase_date == _today_str:
                     continue
@@ -1284,7 +1281,7 @@ with tab1:
                 stop_price = stop_info['stop_price']
                 stop_currency = stop_info.get('currency', 'USD')
                 
-                # השוואה — מחיר נוכחי במטבע הסטופ
+                # מחיר נוכחי במטבע הסטופ
                 if stop_currency == asset['currency']:
                     current_price = asset['current_price']
                 elif stop_currency == 'ILS' and asset['currency'] == 'USD':
@@ -1292,30 +1289,52 @@ with tab1:
                 else:
                     current_price = asset['current_price'] / usd_to_ils
                 
-                # בדוק גם את ה-Low של היום — אם נגע בסטופ במהלך היום
+                # --- Low intraday מסונן ---
+                # אם עודכן סטופ תוך כדי יום, נסנן רק נרות שנצברו אחרי חותמת הזמן.
+                # כך מכוסה גם המקרה בו האפליקציה הייתה סגורה — בפתיחה הנרות כבר שמורים.
                 today_low_in_stop_cur = None
-                _raw_low = asset.get('today_low')
-                if _raw_low is not None:
-                    if stop_currency == asset['currency']:
-                        today_low_in_stop_cur = _raw_low
-                    elif stop_currency == 'ILS' and asset['currency'] == 'USD':
-                        today_low_in_stop_cur = _raw_low * usd_to_ils
-                    else:
-                        today_low_in_stop_cur = _raw_low / usd_to_ils
-                
-                # אחרי שינוי סטופ, בודקים טריגר רק מהתאריך שנקבע (בדרך כלל יום הבא)
-                _check_from = stop_info.get('check_from_date', stop_info.get('low_check_from_date'))
-                _allow_check = (not _check_from) or (_today_str >= _check_from)
+                _check_from_ts_str = stop_info.get('check_from_ts')
+                _check_from_dt = None
+                if _check_from_ts_str:
+                    try:
+                        _check_from_dt = datetime.fromisoformat(_check_from_ts_str)
+                    except Exception:
+                        pass
 
-                # סטופ הופעל אם: המחיר הנוכחי ≤ סטופ, או ה-Low של היום ≤ סטופ (כאשר מותר)
-                _triggered_by_current = _allow_check and current_price <= stop_price
-                _triggered_by_low = _allow_check and today_low_in_stop_cur is not None and today_low_in_stop_cur <= stop_price
+                _intraday_df = history_data.get(f"{ticker_s}__intraday")
+                if _intraday_df is not None and not _intraday_df.empty:
+                    _filtered = _intraday_df
+                    if _check_from_dt is not None:
+                        try:
+                            _idx = _intraday_df.index
+                            if hasattr(_idx, 'tz') and _idx.tz is not None:
+                                import pytz as _pytz
+                                _gate = _pytz.utc.localize(_check_from_dt) if _check_from_dt.tzinfo is None else _check_from_dt.astimezone(_pytz.utc)
+                            else:
+                                _gate = _check_from_dt
+                            _filtered = _intraday_df[_intraday_df.index > _gate]
+                        except Exception:
+                            _filtered = _intraday_df
+                    if not _filtered.empty:
+                        _raw_low = float(_filtered['Low'].min())
+                        if stop_currency == asset['currency']:
+                            today_low_in_stop_cur = _raw_low
+                        elif stop_currency == 'ILS' and asset['currency'] == 'USD':
+                            today_low_in_stop_cur = _raw_low * usd_to_ils
+                        else:
+                            today_low_in_stop_cur = _raw_low / usd_to_ils
+                
+                # מחיר נוכחי: תמיד נבדק (אם המחיר כרגע ≤ סטופ — זה טריגר תקף)
+                _triggered_by_current = current_price <= stop_price
+                # Low: נבדק רק על נרות מסוננים שמאחרי check_from_ts
+                _triggered_by_low = today_low_in_stop_cur is not None and today_low_in_stop_cur <= stop_price
                 
                 if _triggered_by_current or _triggered_by_low:
                     qty_s = asset['qty']
                     proceeds = qty_s * stop_price
                     symbol = "₪" if stop_currency == "ILS" else "$"
                     _trigger_reason = "Low של היום" if (not _triggered_by_current and _triggered_by_low) else "מחיר נוכחי"
+                    _display_low = today_low_in_stop_cur if _triggered_by_low else None
                     
                     newly_executed.append({
                         'ticker': ticker_s,
@@ -1323,7 +1342,7 @@ with tab1:
                         'qty': qty_s,
                         'stop_price': stop_price,
                         'market_price': round(current_price, 2),
-                        'today_low': round(today_low_in_stop_cur, 2) if today_low_in_stop_cur else None,
+                        'today_low': round(_display_low, 2) if _display_low else None,
                         'trigger_reason': _trigger_reason,
                         'proceeds': round(proceeds, 2),
                         'currency': stop_currency,
@@ -1534,8 +1553,8 @@ with tab1:
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button("💾 עדכן", key="update_stop_btn", use_container_width=True):
                             active_stops[_edit_stop_ticker]['stop_price'] = round(_new_stop_price, 2)
-                            # סטופ חדש תקף לטריגר רק מהיום הבא
-                            active_stops[_edit_stop_ticker]['check_from_date'] = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+                            # בדיקת Low תסנן רק נרות שנצברו אחרי רגע זה
+                            active_stops[_edit_stop_ticker]['check_from_ts'] = datetime.utcnow().isoformat()
                             db.save_stop_orders(active_stops)
                             st.success(f"✅ סטופ {_edit_stop_ticker} עודכן ל-{_stop_sym}{_new_stop_price:,.2f}")
                             st.rerun()
