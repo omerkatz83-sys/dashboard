@@ -18,7 +18,6 @@ portfolio = {
     "IEFA": {"qty": 323.4, "type": "Core", "name": "Developed Mkts ex-US"},
     "IEMG": {"qty": 258.49, "type": "Core", "name": "Emerging Markets"},
     "AMZN": {"qty": 9, "type": "Satellite", "name": "Amazon"},
-    "AMD": {"qty": 12, "type": "Satellite", "name": "AMD"},
     "COIN": {"qty": 9, "type": "Crypto", "name": "Coinbase"},
     "FBTC": {"qty": 37, "type": "Crypto", "name": "Fidelity Bitcoin"},
     "ETH": {"qty": 72, "type": "Crypto", "name": "Grayscale Ethereum Mini Trust"},
@@ -34,7 +33,6 @@ cost_basis = {
     "IEFA":         {"price": 88.48,  "currency": "USD", "date": "2025-12-01"},
     "IEMG":         {"price": 67.17,  "currency": "USD", "date": "2025-12-01"},
     "AMZN":         {"price": 243.30, "currency": "USD", "date": "2025-12-01"},
-    "AMD":          {"price": 228.40, "currency": "USD", "date": "2026-04-08"},
     "COIN":         {"price": 385.60, "currency": "USD", "date": "2025-12-01"},
     "FBTC":         {"price": 98.02,  "currency": "USD", "date": "2025-12-01"},
     "ETH":          {"price": 40.26,  "currency": "USD", "date": "2025-12-01"},
@@ -230,7 +228,6 @@ db = SupabaseDatabase()
 # ברירת מחדל — פקודות סטופ פעילות
 default_stop_orders = {
     "AMZN":  {"stop_price": 198.00, "currency": "USD"},
-    "AMD":   {"stop_price": 210.00, "currency": "USD"},
     "IEFA":  {"stop_price": 88.50,  "currency": "USD"},
     "IEMG":  {"stop_price": 67.50,  "currency": "USD"},
     "MSFT":  {"stop_price": 414.00, "currency": "USD"},
@@ -251,7 +248,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 13310.00,
+        "qty": 20562.30,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
