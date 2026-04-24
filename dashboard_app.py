@@ -1165,9 +1165,27 @@ with tab1:
                 if _dk not in active_stops:
                     active_stops[_dk] = _dv
                     _sync_needed = True
+
+            # מיגרציה רטרואקטיבית: סטופים שעודכנו ידנית בעבר ואין להם check_from_date
+            # יקבלו חסימה עד מחר כדי למנוע טריגר שווא מ-Low שהיה לפני עדכון הסטופ.
+            _retrofit_needed = False
+            _tomorrow_str = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+            for _tk, _sv in list(active_stops.items()):
+                if _tk not in default_stop_orders:
+                    continue
+                if not isinstance(_sv, dict):
+                    continue
+                if _sv.get('check_from_date') or _sv.get('low_check_from_date'):
+                    continue
+                _def_sp = default_stop_orders[_tk].get('stop_price')
+                _cur_sp = _sv.get('stop_price')
+                # הסטופ השתנה ידנית ביחס לברירת מחדל, אבל אין חותמת זמן
+                if _def_sp is not None and _cur_sp is not None and float(_cur_sp) != float(_def_sp):
+                    active_stops[_tk]['check_from_date'] = _tomorrow_str
+                    _retrofit_needed = True
             
             # אם אין קובץ — שמור את ברירות המחדל
-            if not db.stop_orders_file_exists() or _sync_needed:
+            if not db.stop_orders_file_exists() or _sync_needed or _retrofit_needed:
                 db.save_stop_orders(active_stops)
             
             # בנה מיפוי של כל הנכסים (US + ישראליים) עם מחירים נוכחיים
