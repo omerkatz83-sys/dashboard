@@ -7,7 +7,7 @@ import numpy as np
 import os
 import json
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from supabase import create_client, Client
 
 TRADE_COMMISSION_USD = 4.90
@@ -1218,9 +1218,13 @@ with tab1:
                 if cp > old_hwm:
                     # מחיר עלה — עדכן את ה-watermark ואת מחיר הסטופ
                     new_hwm = cp
+                    old_stop = active_stops[ticker_s].get('stop_price')
                     new_stop = round(new_hwm * (1 - trail_pct / 100), 2)
                     active_stops[ticker_s]['high_watermark'] = round(new_hwm, 2)
                     active_stops[ticker_s]['stop_price'] = new_stop
+                    # אחרי העלאת סטופ, בדיקת Low תתחיל רק מהיום הבא
+                    if old_stop is None or new_stop != old_stop:
+                        active_stops[ticker_s]['low_check_from_date'] = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
                     _trailing_updated = True
             
             if _trailing_updated:
@@ -1261,9 +1265,13 @@ with tab1:
                     else:
                         today_low_in_stop_cur = _raw_low / usd_to_ils
                 
-                # סטופ הופעל אם: המחיר הנוכחי ≤ סטופ, או ה-Low של היום ≤ סטופ
+                # אחרי שינוי סטופ, Low נספר רק מהתאריך שנקבע (בדרך כלל יום הבא)
+                _low_check_from = stop_info.get('low_check_from_date')
+                _allow_low_check = (not _low_check_from) or (_today_str >= _low_check_from)
+
+                # סטופ הופעל אם: המחיר הנוכחי ≤ סטופ, או ה-Low של היום ≤ סטופ (כאשר מותר)
                 _triggered_by_current = current_price <= stop_price
-                _triggered_by_low = today_low_in_stop_cur is not None and today_low_in_stop_cur <= stop_price
+                _triggered_by_low = _allow_low_check and today_low_in_stop_cur is not None and today_low_in_stop_cur <= stop_price
                 
                 if _triggered_by_current or _triggered_by_low:
                     qty_s = asset['qty']
@@ -1488,6 +1496,8 @@ with tab1:
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button("💾 עדכן", key="update_stop_btn", use_container_width=True):
                             active_stops[_edit_stop_ticker]['stop_price'] = round(_new_stop_price, 2)
+                            # סטופ חדש תקף ל-Low רק מהיום הבא
+                            active_stops[_edit_stop_ticker]['low_check_from_date'] = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
                             db.save_stop_orders(active_stops)
                             st.success(f"✅ סטופ {_edit_stop_ticker} עודכן ל-{_stop_sym}{_new_stop_price:,.2f}")
                             st.rerun()
