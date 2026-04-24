@@ -257,20 +257,79 @@ israeli_stocks = {
     }
 }
 
+
+def _normalize_cash_state(raw_state):
+    state = raw_state or {}
+    state.setdefault("total_deposited_ils", 0.0)
+    state.setdefault("deposits", [])
+    state.setdefault("sale_cash_usd", 0.0)
+    state.setdefault("sale_cash_ils", 0.0)
+    return state
+
+
+def _is_same_sale(existing_sale, sale_entry):
+    return (
+        existing_sale.get('ticker') == sale_entry.get('ticker')
+        and float(existing_sale.get('qty', 0)) == float(sale_entry.get('qty', 0))
+        and float(existing_sale.get('sale_price', 0)) == float(sale_entry.get('sale_price', 0))
+        and existing_sale.get('date') == sale_entry.get('date')
+    )
+
+
+def _record_sale(db_obj, ticker, name, qty, sale_price, currency, sale_date, stop_price=None, reason='manual'):
+    qty = float(qty)
+    sale_price = float(sale_price)
+    _cb_info = cost_basis.get(ticker, {})
+    _cost_per = _cb_info.get('price')
+    _commission = TRADE_COMMISSION_USD
+    if currency == 'USD':
+        _proceeds = round((sale_price * qty) - _commission, 2)
+    else:
+        _proceeds = round(sale_price * qty, 2)
+
+    sale_entry = {
+        'ticker': ticker,
+        'name': name,
+        'qty': qty,
+        'stop_price': stop_price,
+        'sale_price': sale_price,
+        'proceeds': _proceeds,
+        'cost_per_share': _cost_per,
+        'commission_usd': _commission,
+        'currency': currency,
+        'reason': reason,
+        'date': sale_date,
+    }
+
+    sold_stocks_data = db_obj.get_sold_stocks()
+    executed_history = db_obj.get_executed_stops()
+    active_stops = db_obj.get_stop_orders(default_stop_orders.copy())
+    cash_state = _normalize_cash_state(db_obj.get_extra_cash())
+
+    if not any(_is_same_sale(item, sale_entry) for item in sold_stocks_data):
+        sold_stocks_data.append(sale_entry)
+    if not any(_is_same_sale(item, sale_entry) for item in executed_history):
+        executed_history.append(sale_entry)
+
+    if currency == 'ILS':
+        cash_state['sale_cash_ils'] += _proceeds
+        cash_state['sale_cash_usd'] -= _commission
+    else:
+        cash_state['sale_cash_usd'] += _proceeds
+
+    if ticker in active_stops:
+        del active_stops[ticker]
+
+    db_obj.save_sold_stocks(sold_stocks_data)
+    db_obj.save_executed_stops(executed_history)
+    db_obj.save_stop_orders(active_stops)
+    db_obj.save_extra_cash(cash_state)
+    return sale_entry
+
 # --- טעינת מכירות (סטופים שבוצעו) — הסרת מניות שנמכרו + הוספת תמורה למזומן ---
 _sold_stocks = db.get_sold_stocks()
-_extra_cash_usd = 0.0
-_extra_cash_ils = 0.0
 for _sold in _sold_stocks:
     _t = _sold['ticker']
-    _sold_cur = _sold.get('currency', 'USD')
-    _sold_proceeds = _sold.get('proceeds', 0)
-    _sold_cost = _sold.get('cost_per_share', 0)
-    _sold_qty = _sold.get('qty', 0)
-    _sold_profit = (_sold.get('sale_price', 0) - _sold_cost) * _sold_qty
-    _sold_tax = max(0, _sold_profit * 0.25)
-    _sold_commission_usd = _sold.get('commission_usd', TRADE_COMMISSION_USD)
-    _sold_net = _sold_proceeds - _sold_tax
     # הסר מ-portfolio (US stocks)
     if _t in portfolio:
         del portfolio[_t]
@@ -280,12 +339,6 @@ for _sold in _sold_stocks:
     # הסר מ-cost_basis
     if _t in cost_basis:
         del cost_basis[_t]
-    # צבור תמורה למזומן (אחרי ניכוי 25% מס רווח הון)
-    if _sold_cur == 'ILS':
-        _extra_cash_ils += _sold_net
-        _extra_cash_usd -= _sold_commission_usd
-    else:
-        _extra_cash_usd += (_sold_net - _sold_commission_usd)
 
 # --- פונקציות (מחוץ לטאבים - משותף לכולם) ---
 
@@ -574,8 +627,10 @@ with tab1:
     st.sidebar.header("🇮🇱 נכסים ישראליים ומזומן")
     
     # טעינת הפקדות מזומן מצטברות מקובץ
-    _saved_deposits = db.get_extra_cash()
+    _saved_deposits = _normalize_cash_state(db.get_extra_cash())
     _total_deposited_ils = _saved_deposits.get("total_deposited_ils", 0.0)
+    _sale_cash_usd = _saved_deposits.get("sale_cash_usd", 0.0)
+    _sale_cash_ils = _saved_deposits.get("sale_cash_ils", 0.0)
     
     extra_cash_ils = st.sidebar.number_input(
         "💵 הפקדת מזומן חדשה (₪)",
@@ -695,10 +750,12 @@ with tab1:
             price_ils = il_prices.get(ticker, info['default_price_ils'])
             qty = info['qty']
             
-            # הוספת מזומן נוסף מה-sidebar
+            # הוספת מזומן נוסף מה-sidebar ומכירות שכבר נרשמו
             if ticker == 'CASH_USD' and extra_cash_ils > 0:
                 extra_usd = extra_cash_ils / usd_to_ils
                 qty = qty + extra_usd
+            if ticker == 'CASH_USD' and _sale_cash_usd != 0:
+                qty = qty + _sale_cash_usd
             
             if info.get('currency') == 'USD':
                 price_usd = price_ils
@@ -708,6 +765,9 @@ with tab1:
                 price_usd = price_ils / usd_to_ils
                 value_usd = price_usd * qty
                 value_ils = price_ils * qty
+                if ticker == 'CASH_ILS' and _sale_cash_ils != 0:
+                    value_ils += _sale_cash_ils
+                    value_usd = value_ils / usd_to_ils
             israeli_rows.append({
                 "Ticker": ticker,
                 "Name": info['name'],
@@ -1382,44 +1442,28 @@ with tab1:
                 
                 st.markdown("")
                 if st.button("✅ אשר מכירות ועדכן תיק", key="confirm_stops"):
-                    sold_stocks_data = db.get_sold_stocks()
                     total_proceeds_usd = 0
                     total_proceeds_ils = 0
                     for ex in newly_executed:
                         t = ex['ticker']
                         actual_price = _sale_prices.get(t, ex['market_price'])
-                        actual_proceeds = round(actual_price * ex['qty'], 2)
+                        sold_entry = _record_sale(
+                            db,
+                            ticker=t,
+                            name=ex['name'],
+                            qty=ex['qty'],
+                            sale_price=actual_price,
+                            currency=ex['currency'],
+                            sale_date=datetime.now().strftime('%Y-%m-%d %H:%M'),
+                            stop_price=ex['stop_price'],
+                            reason='stop',
+                        )
+                        actual_proceeds = sold_entry['proceeds']
                         
                         if ex['currency'] == 'ILS':
                             total_proceeds_ils += actual_proceeds
                         else:
                             total_proceeds_usd += actual_proceeds
-                        
-                        # הוסף למכירות (כולל עלות רכישה לחישוב רווח/הפסד בהיסטוריה)
-                        _cb_info = cost_basis.get(t)
-                        _cost_per = _cb_info['price'] if _cb_info else None
-                        sold_entry = {
-                            'ticker': t,
-                            'name': ex['name'],
-                            'qty': ex['qty'],
-                            'stop_price': ex['stop_price'],
-                            'sale_price': actual_price,
-                            'proceeds': actual_proceeds,
-                            'cost_per_share': _cost_per,
-                            'commission_usd': TRADE_COMMISSION_USD,
-                            'currency': ex['currency'],
-                            'date': datetime.now().strftime('%Y-%m-%d %H:%M')
-                        }
-                        sold_stocks_data.append(sold_entry)
-                        executed_history.append(sold_entry)
-                        
-                        # הסר סטופ
-                        if t in active_stops:
-                            del active_stops[t]
-                    
-                    db.save_sold_stocks(sold_stocks_data)
-                    db.save_stop_orders(active_stops)
-                    db.save_executed_stops(executed_history)
                     
                     msg = f"✅ בוצע! {len(newly_executed)} פקודות סטופ הופעלו.\n\n"
                     if total_proceeds_usd > 0:
@@ -1557,25 +1601,73 @@ with tab1:
                             st.rerun()
             else:
                 st.info("אין פקודות סטופ פעילות.")
+
+            st.markdown("**💸 רישום מכירה ידנית:**")
+            _manual_sale_tickers = [t for t in all_assets if t not in ('CASH_USD', 'CASH_ILS')]
+            if _manual_sale_tickers:
+                _manual_cols = st.columns([2, 1, 1, 1])
+                with _manual_cols[0]:
+                    _manual_ticker = st.selectbox(
+                        "בחר נכס למכירה",
+                        _manual_sale_tickers,
+                        format_func=lambda t: f"{t} — {all_assets[t]['name']}",
+                        key="manual_sale_ticker"
+                    )
+                _manual_asset = all_assets[_manual_ticker]
+                _manual_sym = "₪" if _manual_asset['currency'] == 'ILS' else "$"
+                with _manual_cols[1]:
+                    st.metric("כמות למכירה", f"{_manual_asset['qty']:.2f}")
+                with _manual_cols[2]:
+                    _manual_sale_price = st.number_input(
+                        f"מחיר מכירה ({_manual_sym})",
+                        min_value=0.01,
+                        value=float(_manual_asset['current_price']),
+                        step=0.01,
+                        key="manual_sale_price"
+                    )
+                with _manual_cols[3]:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("🧾 רשום מכירה", key="record_manual_sale", use_container_width=True):
+                        _manual_stop = active_stops.get(_manual_ticker, {}).get('stop_price')
+                        _manual_entry = _record_sale(
+                            db,
+                            ticker=_manual_ticker,
+                            name=_manual_asset['name'],
+                            qty=_manual_asset['qty'],
+                            sale_price=_manual_sale_price,
+                            currency=_manual_asset['currency'],
+                            sale_date=datetime.now().strftime('%Y-%m-%d %H:%M'),
+                            stop_price=_manual_stop,
+                            reason='manual',
+                        )
+                        st.success(
+                            f"✅ נרשמה מכירה של {_manual_ticker} במחיר {_manual_sym}{_manual_sale_price:,.2f}. "
+                            f"המזומן עודכן ב-{_manual_sym}{_manual_entry['proceeds']:,.2f}."
+                        )
+                        st.rerun()
+            else:
+                st.info("אין נכסים זמינים לרישום מכירה ידנית.")
             
-            # היסטוריית ביצועים
+            # היסטוריית מכירות ממומשות
             if executed_history:
-                with st.expander(f"📜 היסטוריית סטופים שבוצעו ({len(executed_history)})", expanded=False):
+                with st.expander(f"📜 היסטוריית מכירות שבוצעו ({len(executed_history)})", expanded=False):
                     hist_rows = []
                     total_realized_pnl_usd = 0.0
                     total_realized_pnl_ils = 0.0
-                    total_proceeds_usd = 0.0
-                    total_proceeds_ils = 0.0
                     for ex in reversed(executed_history):
                         _is_ils = ex.get('currency') == "ILS"
                         sym = "₪" if _is_ils else "$"
                         _sale_p = ex.get('sale_price', ex.get('market_price', ex['stop_price']))
                         _qty = ex.get('qty', 0)
-                        _proceeds = ex.get('proceeds', _sale_p * _qty)
-                        if _is_ils:
-                            total_proceeds_ils += _proceeds
+                        _commission = ex.get('commission_usd', 0.0)
+                        _gross_proceeds = _sale_p * _qty
+                        _stored_proceeds = ex.get('proceeds')
+                        if _stored_proceeds is None:
+                            _proceeds = round(_gross_proceeds - (_commission if not _is_ils else 0.0), 2)
+                        elif (not _is_ils) and _commission and abs(float(_stored_proceeds) - _gross_proceeds) < 0.02:
+                            _proceeds = round(float(_stored_proceeds) - _commission, 2)
                         else:
-                            total_proceeds_usd += _proceeds
+                            _proceeds = float(_stored_proceeds)
                         # חישוב רווח/הפסד — קודם מהרשומה עצמה, אחרת מה-cost_basis
                         _cost_per = ex.get('cost_per_share')
                         if _cost_per is None:
@@ -1599,9 +1691,10 @@ with tab1:
                             'תאריך': ex.get('date', '—'),
                             'טיקר': ex['ticker'],
                             'שם': ex.get('name', '—'),
+                            'סוג': '🛑 סטופ' if ex.get('reason') == 'stop' else '💸 ידני',
                             'כמות': f"{_qty:.0f}",
                             'עלות רכישה': _cost_str,
-                            'מחיר סטופ': f"{sym}{ex['stop_price']:,.2f}",
+                            'מחיר סטופ': f"{sym}{ex['stop_price']:,.2f}" if ex.get('stop_price') is not None else "—",
                             'מחיר מכירה': f"{sym}{_sale_p:,.2f}",
                             'תמורה': f"{sym}{_proceeds:,.2f}",
                             'רווח/הפסד': _pnl_str,
