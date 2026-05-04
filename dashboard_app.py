@@ -27,6 +27,7 @@ portfolio = {
     "BWXT": {"qty": 12, "type": "Satellite", "name": "BWX Technologies"},
     "TGT":  {"qty": 20,  "type": "Satellite", "name": "Target"},
     "SFL":  {"qty": 200, "type": "Satellite", "name": "SFL Corporation"},
+    "BKR":  {"qty": 35,  "type": "Satellite", "name": "Baker Hughes"},
 }
 
 # --- מחירי רכישה (Cost Basis) למניה ---
@@ -44,6 +45,7 @@ cost_basis = {
     "BWXT":         {"price": 224.79, "currency": "USD", "date": "2026-04-23"},
     "TGT":          {"price": 130.37, "currency": "USD", "date": "2026-04-27"},
     "SFL":          {"price": 11.36,  "currency": "USD", "date": "2026-04-30"},
+    "BKR":          {"price": 69.24,  "currency": "USD", "date": "2026-05-04"},
     "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2025-12-01"},
 }
 
@@ -240,6 +242,7 @@ default_stop_orders = {
     "BWXT":  {"stop_price": 218.00, "currency": "USD"},
     "TGT":   {"stop_price": 127.00, "currency": "USD"},
     "SFL":   {"stop_price": 11.05, "currency": "USD"},
+    "BKR":   {"stop_price": 66.50, "currency": "USD"},
 }
 
 israeli_stocks = {
@@ -254,7 +257,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 15673.10,
+        "qty": 13244.80,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
