@@ -23,9 +23,6 @@ portfolio = {
     "ETH": {"qty": 72, "type": "Crypto", "name": "Grayscale Ethereum Mini Trust"},
     "MSFT": {"qty": 7, "type": "Satellite", "name": "Microsoft"},
 
-    "ONDS": {"qty": 200, "type": "Satellite", "name": "Onds"},
-    "BWXT": {"qty": 12, "type": "Satellite", "name": "BWX Technologies"},
-    "TGT":  {"qty": 20,  "type": "Satellite", "name": "Target"},
     "SFL":  {"qty": 200, "type": "Satellite", "name": "SFL Corporation"},
     "BKR":  {"qty": 35,  "type": "Satellite", "name": "Baker Hughes"},
 }
@@ -41,9 +38,6 @@ cost_basis = {
     "ETH":          {"price": 40.26,  "currency": "USD", "date": "2025-12-01"},
     "MSFT":         {"price": 419.40, "currency": "USD", "date": "2026-04-17"},
 
-    "ONDS":         {"price": 10.75,  "currency": "USD", "date": "2026-04-20"},
-    "BWXT":         {"price": 224.79, "currency": "USD", "date": "2026-04-23"},
-    "TGT":          {"price": 130.37, "currency": "USD", "date": "2026-04-27"},
     "SFL":          {"price": 11.36,  "currency": "USD", "date": "2026-04-30"},
     "BKR":          {"price": 69.24,  "currency": "USD", "date": "2026-05-04"},
     "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2025-12-01"},
@@ -238,9 +232,6 @@ default_stop_orders = {
     "IEMG":  {"stop_price": 67.50,  "currency": "USD"},
     "MSFT":  {"stop_price": 414.00, "currency": "USD"},
 
-    "ONDS":  {"stop_price": 10.30,  "currency": "USD"},
-    "BWXT":  {"stop_price": 218.00, "currency": "USD"},
-    "TGT":   {"stop_price": 127.00, "currency": "USD"},
     "SFL":   {"stop_price": 11.05, "currency": "USD"},
     "BKR":   {"stop_price": 66.50, "currency": "USD"},
 }
@@ -337,8 +328,18 @@ def _record_sale(db_obj, ticker, name, qty, sale_price, currency, sale_date, sto
 
 # --- טעינת מכירות (סטופים שבוצעו) — הסרת מניות שנמכרו + הוספת תמורה למזומן ---
 _sold_stocks = db.get_sold_stocks()
+# קבץ לפי טיקר — שמור רק את תאריך המכירה האחרון לכל טיקר
+_latest_sale_date = {}
 for _sold in _sold_stocks:
     _t = _sold['ticker']
+    _sd = _sold.get('date', '')
+    if _t not in _latest_sale_date or _sd > _latest_sale_date[_t]:
+        _latest_sale_date[_t] = _sd
+for _t, _sale_date in _latest_sale_date.items():
+    # הסר רק אם תאריך המכירה האחרון הוא אחרי תאריך הרכישה הנוכחי
+    _purchase_date_cb = cost_basis.get(_t, {}).get('date', '')
+    if _purchase_date_cb and _sale_date[:10] <= _purchase_date_cb:
+        continue  # נקנה מחדש אחרי המכירה — לא להסיר
     # הסר מ-portfolio (US stocks)
     if _t in portfolio:
         del portfolio[_t]
