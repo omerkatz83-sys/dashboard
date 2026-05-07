@@ -25,6 +25,8 @@ portfolio = {
 
     "SFL":  {"qty": 200, "type": "Satellite", "name": "SFL Corporation"},
     "BKR":  {"qty": 35,  "type": "Satellite", "name": "Baker Hughes"},
+    "AVGO": {"qty": 7,   "type": "Satellite", "name": "Broadcom"},
+    "IGV":  {"qty": 30,  "type": "Satellite", "name": "iShares Expanded Tech-Software"},
 }
 
 # --- מחירי רכישה (Cost Basis) למניה ---
@@ -40,7 +42,9 @@ cost_basis = {
 
     "SFL":          {"price": 11.36,  "currency": "USD", "date": "2026-04-30"},
     "BKR":          {"price": 69.24,  "currency": "USD", "date": "2026-05-04"},
-    "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2025-12-01"},
+    "AVGO":         {"price": 421.73, "currency": "USD", "date": "2026-05-07"},
+    "IGV":          {"price": 90.90,  "currency": "USD", "date": "2026-05-07"},
+    "KSM_SP500":    {"price": 3.2956, "currency": "ILS", "date": "2026-05-06"},
 }
 
 # --- Data Access Layer ---
@@ -232,14 +236,16 @@ default_stop_orders = {
     "IEMG":  {"stop_price": 67.50,  "currency": "USD"},
     "MSFT":  {"stop_price": 414.00, "currency": "USD"},
 
-    "SFL":   {"stop_price": 11.05, "currency": "USD"},
-    "BKR":   {"stop_price": 66.50, "currency": "USD"},
+    "SFL":   {"stop_price": 11.05,  "currency": "USD"},
+    "BKR":   {"stop_price": 66.50,  "currency": "USD"},
+    "AVGO":  {"stop_price": 411.99, "currency": "USD"},
+    "IGV":   {"stop_price": 88.00,  "currency": "USD"},
 }
 
 israeli_stocks = {
     "KSM_SP500": {
         "qty": 23536.00,
-        "default_price_ils": 3.16,
+        "default_price_ils": 3.2956,
         "yf_ticker": None,
         "funder_id": "5122957",  # קסם S&P 500 — משיכת מחיר מ-funder.co.il
         "funder_divisor": 100,    # מחיר funder לחלק ב-100 = מחיר ליחידה
@@ -248,7 +254,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 13244.80,
+        "qty": 7555.89,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
