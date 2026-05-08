@@ -42,7 +42,7 @@ cost_basis = {
     "SFL":          {"price": 11.36,  "currency": "USD", "date": "2026-04-30"},
     "BKR":          {"price": 69.24,  "currency": "USD", "date": "2026-05-04"},
     "IGV":          {"price": 90.90,  "currency": "USD", "date": "2026-05-07"},
-    "KSM_SP500":    {"price": 3.2956, "currency": "ILS", "date": "2026-05-06"},
+    "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2025-12-01"},
 }
 
 # --- Data Access Layer ---
@@ -242,7 +242,7 @@ default_stop_orders = {
 israeli_stocks = {
     "KSM_SP500": {
         "qty": 23536.00,
-        "default_price_ils": 3.2956,
+        "default_price_ils": 3.3697,
         "yf_ticker": None,
         "funder_id": "5122957",  # קסם S&P 500 — משיכת מחיר מ-funder.co.il
         "funder_divisor": 100,    # מחיר funder לחלק ב-100 = מחיר ליחידה
