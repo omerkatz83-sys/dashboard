@@ -15,8 +15,8 @@ TRADE_COMMISSION_USD = 4.90
 # --- הגדרת התיק (מחוץ לטאבים - משותף לכולם) ---
 portfolio = {
     "VUAA.L": {"qty": 190, "type": "Core", "name": "S&P 500"},
-    "IEFA": {"qty": 323.4, "type": "Core", "name": "Developed Mkts ex-US"},
-    "IEMG": {"qty": 258.49, "type": "Core", "name": "Emerging Markets"},
+    "IEFA": {"qty": 323, "type": "Core", "name": "Developed Mkts ex-US"},
+    "IEMG": {"qty": 258, "type": "Core", "name": "Emerging Markets"},
     "AMZN": {"qty": 9, "type": "Satellite", "name": "Amazon"},
     "COIN": {"qty": 9, "type": "Crypto", "name": "Coinbase"},
     "FBTC": {"qty": 37, "type": "Crypto", "name": "Fidelity Bitcoin"},
