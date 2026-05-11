@@ -26,6 +26,7 @@ portfolio = {
     "SFL":  {"qty": 200, "type": "Satellite", "name": "SFL Corporation"},
     "BKR":  {"qty": 35,  "type": "Satellite", "name": "Baker Hughes"},
     "IGV":  {"qty": 30,  "type": "Satellite", "name": "iShares Expanded Tech-Software"},
+    "NVDA": {"qty": 15,  "type": "Satellite", "name": "Nvidia"},
 }
 
 # --- מחירי רכישה (Cost Basis) למניה ---
@@ -42,6 +43,7 @@ cost_basis = {
     "SFL":          {"price": 11.36,  "currency": "USD", "date": "2026-04-30"},
     "BKR":          {"price": 69.24,  "currency": "USD", "date": "2026-05-04"},
     "IGV":          {"price": 90.90,  "currency": "USD", "date": "2026-05-07"},
+    "NVDA":         {"price": 220.50, "currency": "USD", "date": "2026-05-11"},
     "KSM_SP500":    {"price": 3.3571, "currency": "ILS", "date": "2026-05-11"},
 }
 
@@ -237,6 +239,7 @@ default_stop_orders = {
     "SFL":   {"stop_price": 11.05,  "currency": "USD"},
     "BKR":   {"stop_price": 66.50,  "currency": "USD"},
     "IGV":   {"stop_price": 88.00,  "currency": "USD"},
+    "NVDA":  {"stop_price": 212.00, "currency": "USD"},
 }
 
 israeli_stocks = {
@@ -251,7 +254,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 8983.34,
+        "qty": 5670.94,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
