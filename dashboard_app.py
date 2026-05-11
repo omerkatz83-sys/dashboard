@@ -35,14 +35,14 @@ cost_basis = {
     "IEMG":         {"price": 67.17,  "currency": "USD", "date": "2025-12-01"},
     "AMZN":         {"price": 243.30, "currency": "USD", "date": "2025-12-01"},
     "COIN":         {"price": 385.60, "currency": "USD", "date": "2025-12-01"},
-    "FBTC":         {"price": 88.74,  "currency": "USD", "date": "2026-05-11"},
+    "FBTC":         {"price": 88.74,  "currency": "USD", "date": "2026-05-11", "today_buy_qty": 20, "today_buy_price": 71.34},
     "ETH":          {"price": 40.26,  "currency": "USD", "date": "2025-12-01"},
     "MSFT":         {"price": 419.40, "currency": "USD", "date": "2026-04-17"},
 
     "SFL":          {"price": 11.36,  "currency": "USD", "date": "2026-04-30"},
     "BKR":          {"price": 69.24,  "currency": "USD", "date": "2026-05-04"},
     "IGV":          {"price": 90.90,  "currency": "USD", "date": "2026-05-07"},
-    "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2025-12-01"},
+    "KSM_SP500":    {"price": 3.3571, "currency": "ILS", "date": "2026-05-11"},
 }
 
 # --- Data Access Layer ---
@@ -242,7 +242,7 @@ default_stop_orders = {
 israeli_stocks = {
     "KSM_SP500": {
         "qty": 23536.00,
-        "default_price_ils": 3.3697,
+        "default_price_ils": 3.3571,
         "yf_ticker": None,
         "funder_id": "5122957",  # קסם S&P 500 — משיכת מחיר מ-funder.co.il
         "funder_divisor": 100,    # מחיר funder לחלק ב-100 = מחיר ליחידה
@@ -549,14 +549,22 @@ def get_data(portfolio):
             if len(hist_clean) > 1:
                 prev_close = float(hist_clean['Close'].iloc[-2])
             
-            # אם מניה נקנתה היום — נשתמש במחיר הקנייה כ-Prev Close
+            # אם מניה נקנתה/הוגדלה היום — תקן את Prev Close בהתאם
             cb = cost_basis.get(ticker)
             if cb and cb.get('date'):
                 from datetime import date as _date
                 try:
                     buy_date = _date.fromisoformat(cb['date'])
                     if buy_date == _date.today():
-                        prev_close = cb['price']
+                        today_buy_qty = cb.get('today_buy_qty')
+                        if today_buy_qty and today_buy_qty < info['qty']:
+                            # הוספה לפוזיציה קיימת: Prev Close ממוצע משוקלל
+                            old_qty = info['qty'] - today_buy_qty
+                            today_buy_price = cb.get('today_buy_price', cb['price'])
+                            prev_close = (prev_close * old_qty + today_buy_price * today_buy_qty) / info['qty']
+                        else:
+                            # פוזיציה חדשה לגמרי שנקנתה היום
+                            prev_close = cb['price']
                 except ValueError:
                     pass
             
