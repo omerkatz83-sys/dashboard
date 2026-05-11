@@ -19,7 +19,7 @@ portfolio = {
     "IEMG": {"qty": 258, "type": "Core", "name": "Emerging Markets"},
     "AMZN": {"qty": 9, "type": "Satellite", "name": "Amazon"},
     "COIN": {"qty": 9, "type": "Crypto", "name": "Coinbase"},
-    "FBTC": {"qty": 37, "type": "Crypto", "name": "Fidelity Bitcoin"},
+    "FBTC": {"qty": 57, "type": "Crypto", "name": "Fidelity Bitcoin"},
     "ETH": {"qty": 72, "type": "Crypto", "name": "Grayscale Ethereum Mini Trust"},
     "MSFT": {"qty": 7, "type": "Satellite", "name": "Microsoft"},
 
@@ -35,7 +35,7 @@ cost_basis = {
     "IEMG":         {"price": 67.17,  "currency": "USD", "date": "2025-12-01"},
     "AMZN":         {"price": 243.30, "currency": "USD", "date": "2025-12-01"},
     "COIN":         {"price": 385.60, "currency": "USD", "date": "2025-12-01"},
-    "FBTC":         {"price": 98.02,  "currency": "USD", "date": "2025-12-01"},
+    "FBTC":         {"price": 88.74,  "currency": "USD", "date": "2026-05-11"},
     "ETH":          {"price": 40.26,  "currency": "USD", "date": "2025-12-01"},
     "MSFT":         {"price": 419.40, "currency": "USD", "date": "2026-04-17"},
 
@@ -251,7 +251,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 10415.04,
+        "qty": 8983.34,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
