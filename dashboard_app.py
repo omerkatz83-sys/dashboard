@@ -44,7 +44,7 @@ cost_basis = {
     "BKR":          {"price": 69.24,  "currency": "USD", "date": "2026-05-04"},
     "IGV":          {"price": 90.90,  "currency": "USD", "date": "2026-05-07"},
     "NVDA":         {"price": 220.50, "currency": "USD", "date": "2026-05-11"},
-    "KSM_SP500":    {"price": 3.3571, "currency": "ILS", "date": "2026-05-11"},
+    "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2025-12-01"},
 }
 
 # --- Data Access Layer ---
