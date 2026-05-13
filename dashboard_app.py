@@ -28,6 +28,7 @@ portfolio = {
     "IGV":  {"qty": 30,  "type": "Satellite", "name": "iShares Expanded Tech-Software"},
     "NVDA": {"qty": 15,  "type": "Satellite", "name": "Nvidia"},
     "TSLA": {"qty": 6,   "type": "Satellite", "name": "Tesla"},
+    "LIN":  {"qty": 7,   "type": "Satellite", "name": "Linde PLC"},
 }
 
 # --- מחירי רכישה (Cost Basis) למניה ---
@@ -46,6 +47,7 @@ cost_basis = {
     "IGV":          {"price": 90.90,  "currency": "USD", "date": "2026-05-07"},
     "NVDA":         {"price": 220.50, "currency": "USD", "date": "2026-05-11"},
     "TSLA":         {"price": 434.29, "currency": "USD", "date": "2026-05-12"},
+    "LIN":          {"price": 509.00, "currency": "USD", "date": "2026-05-13"},
     "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2025-12-01"},
 }
 
@@ -243,6 +245,7 @@ default_stop_orders = {
     "IGV":   {"stop_price": 88.00,  "currency": "USD"},
     "NVDA":  {"stop_price": 212.00, "currency": "USD"},
     "TSLA":  {"stop_price": 418.00, "currency": "USD"},
+    "LIN":   {"stop_price": 495.00, "currency": "USD"},
 }
 
 israeli_stocks = {
@@ -257,7 +260,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 3060.30,
+        "qty": -507.60,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
