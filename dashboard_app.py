@@ -254,7 +254,7 @@ default_stop_orders = {
 israeli_stocks = {
     "KSM_SP500": {
         "qty": 23536.00,
-        "default_price_ils": 3.3571,
+        "default_price_ils": 3.4069,
         "yf_ticker": None,
         "funder_id": "5122957",  # קסם S&P 500 — משיכת מחיר מ-funder.co.il
         "funder_divisor": 100,    # מחיר funder לחלק ב-100 = מחיר ליחידה
@@ -707,6 +707,13 @@ with tab1:
             _target_date = _funder_target_refresh_date()
             _needs_refresh = saved_prices.get(_marker_key) != _target_date
 
+            # כפתור רענון ידני — מאפשר לאלץ שליפה מחדש מ-funder
+            _col1, _col2 = st.sidebar.columns([3, 1])
+            if _col2.button("🔄", key=f"force_refresh_{ticker}", help=f"רענן מחיר {info['name']} מ-funder"):
+                _needs_refresh = True
+                if _marker_key in saved_prices:
+                    del saved_prices[_marker_key]
+
             # רענון פעם ביום לפי תאריך היעד
             if _needs_refresh:
                 _funder_raw = get_funder_price(_funder_id)
@@ -719,10 +726,10 @@ with tab1:
 
             if ticker in saved_prices:
                 il_prices[ticker] = saved_prices[ticker]
-                st.sidebar.caption(f"💰 {info['name']} ✅ ₪{il_prices[ticker]:.2f}")
+                _col1.caption(f"💰 {info['name']} ✅ ₪{il_prices[ticker]:.2f}")
             else:
                 il_prices[ticker] = info['default_price_ils']
-                st.sidebar.caption(f"💰 {info['name']} ⚠️ ₪{il_prices[ticker]:.2f} (לא עודכן)")
+                _col1.caption(f"💰 {info['name']} ⚠️ ₪{il_prices[ticker]:.2f} (לא עודכן)")
             continue
         
         sk = f"il_price_{ticker}"
