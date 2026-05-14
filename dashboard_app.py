@@ -29,6 +29,7 @@ portfolio = {
     "NVDA": {"qty": 15,  "type": "Satellite", "name": "Nvidia"},
     "TSLA": {"qty": 6,   "type": "Satellite", "name": "Tesla"},
     "LIN":  {"qty": 7,   "type": "Satellite", "name": "Linde PLC"},
+    "PPA":  {"qty": 15,  "type": "Satellite", "name": "Invesco Aerospace & Defense ETF"},
 }
 
 # --- מחירי רכישה (Cost Basis) למניה ---
@@ -48,6 +49,7 @@ cost_basis = {
     "NVDA":         {"price": 220.50, "currency": "USD", "date": "2026-05-11"},
     "TSLA":         {"price": 434.29, "currency": "USD", "date": "2026-05-12"},
     "LIN":          {"price": 509.00, "currency": "USD", "date": "2026-05-13"},
+    "PPA":          {"price": 170.01, "currency": "USD", "date": "2026-05-14"},
     "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2025-12-01"},
 }
 
@@ -246,6 +248,7 @@ default_stop_orders = {
     "NVDA":  {"stop_price": 212.00, "currency": "USD"},
     "TSLA":  {"stop_price": 418.00, "currency": "USD"},
     "LIN":   {"stop_price": 495.00, "currency": "USD"},
+    "PPA":   {"stop_price": 164.50, "currency": "USD"},
 }
 
 israeli_stocks = {
@@ -260,7 +263,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": -507.60,
+        "qty": -3062.65,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
