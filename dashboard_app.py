@@ -25,7 +25,7 @@ portfolio = {
 
     "SFL":  {"qty": 200, "type": "Satellite", "name": "SFL Corporation"},
     "BKR":  {"qty": 35,  "type": "Satellite", "name": "Baker Hughes"},
-    "IGV":  {"qty": 30,  "type": "Satellite", "name": "iShares Expanded Tech-Software"},
+    "IGV":  {"qty": 60,  "type": "Satellite", "name": "iShares Expanded Tech-Software"},
     "NVDA": {"qty": 15,  "type": "Satellite", "name": "Nvidia"},
     "TSLA": {"qty": 6,   "type": "Satellite", "name": "Tesla"},
     "LIN":  {"qty": 7,   "type": "Satellite", "name": "Linde PLC"},
@@ -45,7 +45,7 @@ cost_basis = {
 
     "SFL":          {"price": 11.36,  "currency": "USD", "date": "2026-04-30"},
     "BKR":          {"price": 69.24,  "currency": "USD", "date": "2026-05-04"},
-    "IGV":          {"price": 90.90,  "currency": "USD", "date": "2026-05-07"},
+    "IGV":          {"price": 90.97,  "currency": "USD", "date": "2026-05-15"},
     "NVDA":         {"price": 220.50, "currency": "USD", "date": "2026-05-11"},
     "TSLA":         {"price": 434.29, "currency": "USD", "date": "2026-05-12"},
     "LIN":          {"price": 509.00, "currency": "USD", "date": "2026-05-13"},
@@ -263,7 +263,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": -3062.65,
+        "qty": -5798.45,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
