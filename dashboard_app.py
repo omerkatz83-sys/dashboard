@@ -3438,10 +3438,10 @@ with tab4:
 
     # --- הגדרת תלמידים ---
     STUDENTS = {
-        "ron": {"name": "רון", "emoji": "🧑‍🎓"},
-        "shachar": {"name": "שחר", "emoji": "👩‍🎓"},
-        "itay_adva": {"name": "איתי ואדווה", "emoji": "👫"},
-        "itamar": {"name": "איתמר", "emoji": "🧑‍🎓"},
+        "ron":       {"name": "רון",          "emoji": "🧑‍🎓", "default_rate": 130},
+        "shachar":   {"name": "שחר",          "emoji": "👩‍🎓", "default_rate": 150},
+        "itay_adva": {"name": "איתי ואדווה", "emoji": "👫",  "default_rate": 120},
+        "itamar":    {"name": "איתמר",        "emoji": "🧑‍🎓", "default_rate": 150},
     }
 
     # --- טעינת נתונים ---
@@ -3477,8 +3477,9 @@ with tab4:
             duration_hours = st.number_input("משך (שעות)", min_value=0.25, max_value=10.0,
                                               value=1.0, step=0.25, key="lesson_dur")
         with price_cols[1]:
+            _default_rate = float(STUDENTS[selected_student]["default_rate"])
             price_per_hour = st.number_input("מחיר לשעה (₪)", min_value=0.0,
-                                              value=100.0, step=10.0, key="lesson_pph")
+                                              value=_default_rate, step=10.0, key="lesson_pph")
         with price_cols[2]:
             total_amount = duration_hours * price_per_hour
             st.metric("סה״כ", f"₪{total_amount:,.0f}")
@@ -3629,6 +3630,69 @@ with tab4:
                     rows.append(row)
                 
                 st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+                # --- מסקנות לתלמיד ---
+                st.markdown("---")
+                _s_avg_rate = s_total / s_hours if s_hours > 0 else 0
+                _s_default_rate = float(student_info.get("default_rate", 0))
+                _s_monthly_inc = {}
+                for _sl in student_lessons:
+                    _mk2 = _sl["date"][:7]
+                    _s_monthly_inc[_mk2] = _s_monthly_inc.get(_mk2, 0) + _sl["total"]
+                _s_num_months = max(len(_s_monthly_inc), 1)
+                _s_monthly_avg = s_total / _s_num_months
+                _s_proj_annual = _s_monthly_avg * 12
+                _last_lesson_date = max(_sl["date"] for _sl in student_lessons)
+                _last_dt = datetime.strptime(_last_lesson_date, "%Y-%m-%d")
+                _days_since = (datetime.now() - _last_dt).days
+
+                if s_count > 1:
+                    _dates_sorted = sorted(datetime.strptime(_sl["date"], "%Y-%m-%d") for _sl in student_lessons)
+                    _gaps = [(_dates_sorted[i+1] - _dates_sorted[i]).days for i in range(len(_dates_sorted)-1)]
+                    _avg_gap_s = sum(_gaps) / len(_gaps)
+                    _freq_per_month_s = 30 / _avg_gap_s if _avg_gap_s > 0 else 0
+                else:
+                    _avg_gap_s = None
+                    _freq_per_month_s = None
+
+                _sm_cols = st.columns(4)
+                _sm_cols[0].metric("💰 הכנסה כוללת", f"₪{s_total:,.0f}")
+                _sm_cols[1].metric("⏱️ שעות כולל", f"{s_hours:.1f}")
+                _sm_cols[2].metric("📊 ממוצע חודשי", f"₪{_s_monthly_avg:,.0f}")
+                _sm_cols[3].metric("📈 תחזית שנתית", f"₪{_s_proj_annual:,.0f}")
+
+                _stips = []
+                if _s_default_rate > 0 and _s_avg_rate > 0:
+                    _rate_diff = _s_avg_rate - _s_default_rate
+                    if abs(_rate_diff) < 5:
+                        _stips.append(("success", f"✅ **תעריף תקין:** ₪{_s_avg_rate:.0f}/שעה — תואם את התעריף המוגדר (₪{_s_default_rate:.0f})."))
+                    elif _rate_diff < 0:
+                        _stips.append(("warning", f"⚠️ **תעריף ממוצע נמוך (₪{_s_avg_rate:.0f}/שעה)** לעומת תעריף בסיס ₪{_s_default_rate:.0f}. ייתכן שיש שיעורים שנרשמו בסכום שגוי."))
+                    else:
+                        _stips.append(("info", f"ℹ️ **תעריף ממוצע (₪{_s_avg_rate:.0f}/שעה)** מעל הבסיס (₪{_s_default_rate:.0f})."))
+
+                if _days_since > 30:
+                    _stips.append(("warning", f"📅 **השיעור האחרון לפני {_days_since} ימים** ({_last_lesson_date}). האם {student_info['name']} עדיין פעיל/ה?"))
+                elif _days_since > 14:
+                    _stips.append(("info", f"📅 **שיעור אחרון:** {_last_lesson_date} (לפני {_days_since} ימים)."))
+                else:
+                    _stips.append(("success", f"📅 **פעיל/ה:** שיעור אחרון לפני {_days_since} ימים ({_last_lesson_date})."))
+
+                if _freq_per_month_s is not None:
+                    if _freq_per_month_s < 1:
+                        _stips.append(("warning", f"📉 **תדירות נמוכה ({_freq_per_month_s:.1f} שיעורים/חודש).** שיעור שבועי קבוע יוסיף ~₪{_s_default_rate * 4:,.0f}/חודש."))
+                    elif _freq_per_month_s < 3:
+                        _stips.append(("info", f"📊 **תדירות בינונית ({_freq_per_month_s:.1f} שיעורים/חודש)** — יש מקום להגדיל."))
+                    else:
+                        _stips.append(("success", f"✅ **תדירות טובה ({_freq_per_month_s:.1f} שיעורים/חודש).**"))
+
+                _stips.append(("info", f"🔮 **תחזית שנתית מ{student_info['name']}:** ₪{_s_proj_annual:,.0f} (בהמשך קצב של ₪{_s_monthly_avg:,.0f}/חודש)."))
+
+                for _st2, _sm2 in _stips:
+                    if _st2 == "success": st.success(_sm2)
+                    elif _st2 == "warning": st.warning(_sm2)
+                    elif _st2 == "error": st.error(_sm2)
+                    else: st.info(_sm2)
 
         st.divider()
 
@@ -3813,6 +3877,77 @@ with tab4:
                 st.error(_tip_msg)
             else:
                 st.info(_tip_msg)
+
+        st.divider()
+
+        # --- תחזית עתידית חודש-חודש ---
+        st.subheader("🔮 תחזית עתידית — 2026")
+
+        _fc_now = datetime.now()
+        _fc_year = _fc_now.year
+        _all_year_months = [f"{_fc_year}-{m:02d}" for m in range(1, 13)]
+
+        # הכנסות בפועל לפי חודש בשנה הנוכחית
+        _actual_by_month = {}
+        for _fl in all_lessons:
+            if _fl["date"].startswith(str(_fc_year)):
+                _mk3 = _fl["date"][:7]
+                _actual_by_month[_mk3] = _actual_by_month.get(_mk3, 0) + _fl["total"]
+
+        # בניית טבלת תחזית
+        _fc_rows = []
+        for _fc_m in _all_year_months:
+            _fc_m_dt = datetime.strptime(_fc_m + "-01", "%Y-%m-%d")
+            if _fc_m in _actual_by_month:
+                _fc_rows.append({"חודש": _fc_m, "סכום": _actual_by_month[_fc_m], "סוג": "בפועל"})
+            elif _fc_m_dt.month >= _fc_now.month:
+                _fc_rows.append({"חודש": _fc_m, "סכום": monthly_avg, "סוג": "תחזית"})
+
+        if _fc_rows:
+            _fc_df = pd.DataFrame(_fc_rows)
+            _fc_actual_sum = _fc_df[_fc_df["סוג"] == "בפועל"]["סכום"].sum()
+            _fc_projected_sum = _fc_df[_fc_df["סוג"] == "תחזית"]["סכום"].sum()
+            _fc_total = _fc_actual_sum + _fc_projected_sum
+
+            _fc_kpi = st.columns(4)
+            _fc_kpi[0].metric("✅ בפועל 2026", f"₪{_fc_actual_sum:,.0f}")
+            _fc_kpi[1].metric("🔮 תחזית יתרת השנה", f"₪{_fc_projected_sum:,.0f}")
+            _fc_kpi[2].metric("📊 סה״כ צפוי 2026", f"₪{_fc_total:,.0f}")
+            _fc_goal_delta = _fc_total - _GOAL_ANNUAL
+            _fc_kpi[3].metric(
+                f"🎯 מול יעד ₪{_GOAL_ANNUAL:,}",
+                f"{'✅ עומד ביעד' if _fc_goal_delta >= 0 else '❌ לא עומד'}",
+                delta=f"{_fc_goal_delta:+,.0f}₪"
+            )
+
+            _fc_fig = px.bar(
+                _fc_df, x="חודש", y="סכום", color="סוג",
+                color_discrete_map={"בפועל": "#42a5f5", "תחזית": "#b0bec5"},
+                text_auto=True,
+            )
+            _fc_fig.add_hline(
+                y=_GOAL_ANNUAL / 12, line_dash="dash", line_color="#ef5350",
+                annotation_text=f"יעד חודשי ₪{_GOAL_ANNUAL/12:,.0f}",
+                annotation_position="top right"
+            )
+            _fc_fig.update_layout(
+                yaxis_title="₪", xaxis_title="", legend_title="", height=380,
+                showlegend=True,
+            )
+            _fc_fig.update_traces(texttemplate="₪%{y:,.0f}", textposition="outside")
+            st.plotly_chart(_fc_fig, use_container_width=True)
+
+            if _fc_total >= _GOAL_ANNUAL:
+                st.success(f"🏆 **תחזית {_fc_year}: ₪{_fc_total:,.0f}** — עומד ביעד ₪{_GOAL_ANNUAL:,}! כל הכבוד!")
+            else:
+                _fc_gap = _GOAL_ANNUAL - _fc_total
+                _fc_months_left = max(12 - _fc_now.month, 1)
+                _fc_extra_hours = _fc_gap / avg_per_hour / _fc_months_left if avg_per_hour > 0 else 0
+                st.warning(
+                    f"📊 **תחזית {_fc_year}: ₪{_fc_total:,.0f}** — חסרים ₪{_fc_gap:,.0f} ליעד. "
+                    f"כדי לסגור את הפער: עוד **{_fc_extra_hours:.1f} שעות/חודש** עד סוף השנה, "
+                    f"או העלאת תעריף ב-₪{_fc_gap / (total_hours if total_hours > 0 else 1):.0f}/שעה על כל השיעורים הנותרים."
+                )
 
         st.divider()
 
