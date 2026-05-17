@@ -3440,7 +3440,8 @@ with tab4:
     STUDENTS = {
         "ron": {"name": "רון", "emoji": "🧑‍🎓"},
         "shachar": {"name": "שחר", "emoji": "👩‍🎓"},
-        "itay_adva": {"name": "איתי ואדווה", "emoji": "�"},
+        "itay_adva": {"name": "איתי ואדווה", "emoji": "👫"},
+        "itamar": {"name": "איתמר", "emoji": "🧑‍🎓"},
     }
 
     # --- טעינת נתונים ---
