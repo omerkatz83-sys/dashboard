@@ -50,7 +50,7 @@ cost_basis = {
     "TSLA":         {"price": 434.29, "currency": "USD", "date": "2026-05-12"},
     "LIN":          {"price": 509.00, "currency": "USD", "date": "2026-05-13"},
     "PPA":          {"price": 170.01, "currency": "USD", "date": "2026-05-14"},
-    "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2025-12-01"},
+    "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2026-05-19"},
 }
 
 # --- Data Access Layer ---
