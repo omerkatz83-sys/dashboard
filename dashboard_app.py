@@ -694,6 +694,11 @@ with tab1:
     
     if _total_deposited_ils > 0:
         st.sidebar.caption(f"💰 סה״כ הופקד: ₪{_total_deposited_ils:,.0f}")
+    if _sale_cash_ils > 0:
+        st.sidebar.caption(f"💵 מזומן שקלי (מכירות): ₪{_sale_cash_ils:,.0f}")
+    if _sale_cash_usd != 0:
+        _sign = '+' if _sale_cash_usd > 0 else ''
+        st.sidebar.caption(f"💵 מזומן דולרי (מכירות): {_sign}${_sale_cash_usd:,.0f}")
     
     st.sidebar.caption("מחירי קרנות ישראליות:")
     
@@ -1927,11 +1932,13 @@ with tab1:
                         'משקל בתיק %': 0
                     })
             
-            # מזומן
-            cash_usd = israeli_stocks.get('CASH_USD', {}).get('qty', 0)
+            # מזומן (כולל תמורות מכירות ודולרים נוספים שנטענו)
+            cash_usd = israeli_stocks.get('CASH_USD', {}).get('qty', 0) + _sale_cash_usd
+            if _total_deposited_ils > 0:
+                cash_usd += _total_deposited_ils / usd_ils
             total_cost_usd += cash_usd
             total_value_usd += cash_usd
-            cash_ils = israeli_stocks.get('CASH_ILS', {}).get('qty', 0)
+            cash_ils = israeli_stocks.get('CASH_ILS', {}).get('qty', 0) + _sale_cash_ils
             cash_ils_as_usd = cash_ils / usd_ils if usd_ils > 0 else 0
             total_cost_usd += cash_ils_as_usd
             total_value_usd += cash_ils_as_usd
