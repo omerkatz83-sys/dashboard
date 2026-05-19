@@ -268,6 +268,14 @@ israeli_stocks = {
         "type": "Cash",
         "name": "מזומן ($)",
         "currency": "USD"
+    },
+    "CASH_ILS": {
+        "qty": 0.0,
+        "default_price_ils": 1.0,
+        "yf_ticker": None,
+        "type": "Cash",
+        "name": "מזומן (₪)",
+        "currency": "ILS"
     }
 }
 
