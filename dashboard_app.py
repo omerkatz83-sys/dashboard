@@ -237,9 +237,8 @@ db = SupabaseDatabase()
 
 # ברירת מחדל — פקודות סטופ פעילות
 default_stop_orders = {
-    "AMZN":  {"stop_price": 198.00, "currency": "USD"},
     "IEFA":  {"stop_price": 88.50,  "currency": "USD"},
-    "IEMG":  {"stop_price": 67.50,  "currency": "USD"},
+    "IEMG":  {"stop_price": 77.49,  "currency": "USD"},
     "MSFT":  {"stop_price": 414.00, "currency": "USD"},
 
     "SFL":   {"stop_price": 11.05,  "currency": "USD"},
@@ -253,8 +252,8 @@ default_stop_orders = {
 
 israeli_stocks = {
     "KSM_SP500": {
-        "qty": 23536.00,
-        "default_price_ils": 3.4069,
+        "qty": 9682.00,
+        "default_price_ils": 3.433,
         "yf_ticker": None,
         "funder_id": "5122957",  # קסם S&P 500 — משיכת מחיר מ-funder.co.il
         "funder_divisor": 100,    # מחיר funder לחלק ב-100 = מחיר ליחידה

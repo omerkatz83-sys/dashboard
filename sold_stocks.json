@@ -10,5 +10,31 @@
     "commission_usd": 4.9,
     "currency": "USD",
     "date": "2026-04-24 00:00"
+  },
+  {
+    "ticker": "KSM_SP500",
+    "name": "S&P 500 (₪)",
+    "qty": 13854.0,
+    "stop_price": null,
+    "sale_price": 3.433,
+    "proceeds": 47560.78,
+    "cost_per_share": 2.3603,
+    "commission_usd": 4.9,
+    "currency": "ILS",
+    "reason": "manual",
+    "date": "2026-05-19"
+  },
+  {
+    "ticker": "AMZN",
+    "name": "Amazon",
+    "qty": 9.0,
+    "stop_price": 198.0,
+    "sale_price": 258.41,
+    "proceeds": 2320.79,
+    "cost_per_share": 243.3,
+    "commission_usd": 4.9,
+    "currency": "USD",
+    "reason": "stop",
+    "date": "2026-05-19"
   }
 ]
