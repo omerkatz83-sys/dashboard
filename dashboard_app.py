@@ -796,6 +796,8 @@ with tab1:
             st.stop()
         usd_to_ils = get_usd_to_ils()
         df['Value ILS'] = df['Value'] * usd_to_ils
+        # עדכון כמויות מזומן לפני הלולאה
+        israeli_stocks['CASH_ILS']['qty'] = _sale_cash_ils  # מזומן שקלי ממכירות
         # הוספת מניות ישראליות ומזומן
         israeli_rows = []
         for ticker, info in israeli_stocks.items():
@@ -817,9 +819,6 @@ with tab1:
                 price_usd = price_ils / usd_to_ils
                 value_usd = price_usd * qty
                 value_ils = price_ils * qty
-                if ticker == 'CASH_ILS' and _sale_cash_ils != 0:
-                    value_ils += _sale_cash_ils
-                    value_usd = value_ils / usd_to_ils
             israeli_rows.append({
                 "Ticker": ticker,
                 "Name": info['name'],
@@ -1938,7 +1937,7 @@ with tab1:
                 cash_usd += _total_deposited_ils / usd_ils
             total_cost_usd += cash_usd
             total_value_usd += cash_usd
-            cash_ils = israeli_stocks.get('CASH_ILS', {}).get('qty', 0) + _sale_cash_ils
+            cash_ils = israeli_stocks.get('CASH_ILS', {}).get('qty', 0)  # qty already = _sale_cash_ils
             cash_ils_as_usd = cash_ils / usd_ils if usd_ils > 0 else 0
             total_cost_usd += cash_ils_as_usd
             total_value_usd += cash_ils_as_usd
