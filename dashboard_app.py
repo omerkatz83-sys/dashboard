@@ -269,14 +269,6 @@ israeli_stocks = {
         "name": "מזומן ($)",
         "currency": "USD"
     },
-    "CASH_ILS": {
-        "qty": 0.0,
-        "default_price_ils": 1.0,
-        "yf_ticker": None,
-        "type": "Cash",
-        "name": "מזומן (₪)",
-        "currency": "ILS"
-    }
 }
 
 
@@ -694,11 +686,6 @@ with tab1:
     
     if _total_deposited_ils > 0:
         st.sidebar.caption(f"💰 סה״כ הופקד: ₪{_total_deposited_ils:,.0f}")
-    if _sale_cash_ils > 0:
-        st.sidebar.caption(f"💵 מזומן שקלי (מכירות): ₪{_sale_cash_ils:,.0f}")
-    if _sale_cash_usd != 0:
-        _sign = '+' if _sale_cash_usd > 0 else ''
-        st.sidebar.caption(f"💵 מזומן דולרי (מכירות): {_sign}${_sale_cash_usd:,.0f}")
     
     st.sidebar.caption("מחירי קרנות ישראליות:")
     
@@ -708,7 +695,7 @@ with tab1:
     il_prices = {}
     _il_prices_changed = False
     for ticker, info in israeli_stocks.items():
-        if info.get('currency') == 'USD' or ticker in ('CASH_USD', 'CASH_ILS'):
+        if info.get('currency') == 'USD' or ticker == 'CASH_USD':
             il_prices[ticker] = info['default_price_ils']
             continue
         
@@ -796,8 +783,6 @@ with tab1:
             st.stop()
         usd_to_ils = get_usd_to_ils()
         df['Value ILS'] = df['Value'] * usd_to_ils
-        # עדכון כמויות מזומן לפני הלולאה
-        israeli_stocks['CASH_ILS']['qty'] = _sale_cash_ils  # מזומן שקלי ממכירות
         # הוספת מניות ישראליות ומזומן
         israeli_rows = []
         for ticker, info in israeli_stocks.items():
@@ -1937,10 +1922,6 @@ with tab1:
                 cash_usd += _total_deposited_ils / usd_ils
             total_cost_usd += cash_usd
             total_value_usd += cash_usd
-            cash_ils = israeli_stocks.get('CASH_ILS', {}).get('qty', 0)  # qty already = _sale_cash_ils
-            cash_ils_as_usd = cash_ils / usd_ils if usd_ils > 0 else 0
-            total_cost_usd += cash_ils_as_usd
-            total_value_usd += cash_ils_as_usd
             
             # חישוב תשואת התיק הכוללת
             my_total_return = ((total_value_usd - total_cost_usd) / total_cost_usd) * 100 if total_cost_usd > 0 else 0
