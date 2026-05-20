@@ -1693,7 +1693,7 @@ with tab1:
                     for ex in reversed(executed_history):
                         _is_ils = ex.get('currency') == "ILS"
                         sym = "₪" if _is_ils else "$"
-                        _sale_p = ex.get('sale_price', ex.get('market_price', ex['stop_price']))
+                        _sale_p = ex.get('sale_price', ex.get('market_price', ex.get('stop_price')))
                         _qty = ex.get('qty', 0)
                         _commission = ex.get('commission_usd', 0.0)
                         _gross_proceeds = _sale_p * _qty
