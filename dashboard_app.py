@@ -30,6 +30,7 @@ portfolio = {
     "TSLA": {"qty": 7,   "type": "Satellite", "name": "Tesla"},
     "LIN":  {"qty": 7,   "type": "Satellite", "name": "Linde PLC"},
     "PPA":  {"qty": 15,  "type": "Satellite", "name": "Invesco Aerospace & Defense ETF"},
+    "CCJ":  {"qty": 27,  "type": "Satellite", "name": "Cameco Corporation"},
 }
 
 # --- מחירי רכישה (Cost Basis) למניה ---
@@ -51,6 +52,7 @@ cost_basis = {
     "LIN":          {"price": 509.00, "currency": "USD", "date": "2026-05-13"},
     "PPA":          {"price": 170.01, "currency": "USD", "date": "2026-05-14"},
     "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2026-05-19"},
+    "CCJ":          {"price": 106.78, "currency": "USD", "date": "2026-05-27"},
 }
 
 # --- Data Access Layer ---
@@ -248,6 +250,7 @@ default_stop_orders = {
     "TSLA":  {"stop_price": 403.00, "currency": "USD"},
     "LIN":   {"stop_price": 495.00, "currency": "USD"},
     "PPA":   {"stop_price": 164.50, "currency": "USD"},
+    "CCJ":   {"stop_price": 99.90,  "currency": "USD"},
 }
 
 israeli_stocks = {
@@ -262,7 +265,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 24536.04,
+        "qty": 21652.98,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
