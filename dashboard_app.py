@@ -1758,18 +1758,16 @@ with tab1:
         # ==================== הכנסה פסיבית מדיבידנדים ====================
         st.subheader("💰 הכנסה פסיבית מדיבידנדים")
         
-        # נתוני דיבידנד ברירת מחדל (דיבידנד שנתי למניה $)
+        # נתוני דיבידנד ברירת מחדל (דיבידנד שנתי למניה $ — trailing 12 months)
         default_dividends = {
-            "IEFA":   3.18,   # ~3.27% yield
-            "IEMG":   1.85,   # ~2.47% yield
+            "IEFA":   3.178,  # ~3.25% yield
+            "IEMG":   1.849,  # ~2.23% yield
+            "MSFT":   3.56,   # ~0.86% yield
+            "SFL":    0.47,   # ~4.06% yield
+            "BKR":    0.92,   # ~1.45% yield
             "NVDA":   0.04,   # ~0.02% yield
-            "BKR":    0.92,   # ~1.50% yield
-            "PPA":    0.66,   # ~0.37% yield
-            "XLE":    2.16,   # ~3.92% yield
-            "TXT":    0.08,   # ~0.08% yield
-            "BA":     0.00,   # suspended dividend
-            "AAPL":   1.00,   # ~0.38% yield
-            "TAN":    0.27,   # ~0.48% yield
+            "LIN":    6.10,   # ~1.19% yield
+            "PPA":    0.656,  # ~0.38% yield
         }
         
         # כפתור עדכון דיבידנדים מ-API
@@ -1849,7 +1847,7 @@ with tab1:
             
             non_div_count = len(portfolio) - len(div_rows)
             if non_div_count > 0:
-                st.caption(f"ℹ️ {non_div_count} נכסים בתיק לא מחלקים דיבידנד (VUAA.L, AMZN, COIN, FBTC, ETH).")
+                st.caption(f"ℹ️ {non_div_count} נכסים בתיק לא מחלקים דיבידנד (VUAA.L, TSLA, IGV).")
             st.caption("💡 סכומי הדיבידנד מבוססים על ברירת מחדל. לחץ '🔄 עדכן דיבידנדים' לקבלת נתונים עדכניים מ-yfinance.")
         else:
             st.info("לא נמצאו נכסים מחלקי דיבידנד בתיק.")
