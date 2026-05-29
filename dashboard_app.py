@@ -27,7 +27,7 @@ portfolio = {
     "SFL":  {"qty": 200, "type": "Satellite", "name": "SFL Corporation"},
     "BKR":  {"qty": 35,  "type": "Satellite", "name": "Baker Hughes"},
     "IGV":  {"qty": 30,  "type": "Satellite", "name": "iShares Expanded Tech-Software"},
-    "NVDA": {"qty": 26,  "type": "Satellite", "name": "Nvidia"},
+    "NVDA": {"qty": 31,  "type": "Satellite", "name": "Nvidia"},
     "TSLA": {"qty": 7,   "type": "Satellite", "name": "Tesla"},
     "LIN":  {"qty": 7,   "type": "Satellite", "name": "Linde PLC"},
     "PPA":  {"qty": 15,  "type": "Satellite", "name": "Invesco Aerospace & Defense ETF"},
@@ -49,7 +49,7 @@ cost_basis = {
     "SFL":          {"price": 11.36,  "currency": "USD", "date": "2026-04-30"},
     "BKR":          {"price": 69.24,  "currency": "USD", "date": "2026-05-04"},
     "IGV":          {"price": 91.03,  "currency": "USD", "date": "2026-05-15"},
-    "NVDA":         {"price": 218.41, "currency": "USD", "date": "2026-05-26"},
+    "NVDA":         {"price": 217.86, "currency": "USD", "date": "2026-05-26", "last_add_date": "2026-05-29", "last_add_qty": 5, "last_add_price": 215.00},
     "TSLA":         {"price": 428.18, "currency": "USD", "date": "2026-05-26"},
     "LIN":          {"price": 509.00, "currency": "USD", "date": "2026-05-13"},
     "PPA":          {"price": 170.01, "currency": "USD", "date": "2026-05-14"},
@@ -267,7 +267,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 18378.50,
+        "qty": 17303.50,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
