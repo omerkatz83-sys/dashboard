@@ -20,7 +20,8 @@ portfolio = {
     "AMZN": {"qty": 9, "type": "Satellite", "name": "Amazon"},
     "COIN": {"qty": 9, "type": "Crypto", "name": "Coinbase"},
     "FBTC": {"qty": 57, "type": "Crypto", "name": "Fidelity Bitcoin"},
-    "ETH": {"qty": 72, "type": "Crypto", "name": "Grayscale Ethereum Mini Trust"},
+    "ETH": {"qty": 98, "type": "Crypto", "name": "Grayscale Ethereum Mini Trust"},
+    "PLTR": {"qty": 18,  "type": "Satellite", "name": "Palantir Technologies"},
     "MSFT": {"qty": 7, "type": "Satellite", "name": "Microsoft"},
 
     "SFL":  {"qty": 200, "type": "Satellite", "name": "SFL Corporation"},
@@ -41,7 +42,8 @@ cost_basis = {
     "AMZN":         {"price": 243.30, "currency": "USD", "date": "2025-12-01"},
     "COIN":         {"price": 385.60, "currency": "USD", "date": "2025-12-01"},
     "FBTC":         {"price": 88.74,  "currency": "USD", "date": "2026-05-11", "today_buy_qty": 20, "today_buy_price": 71.34},
-    "ETH":          {"price": 40.26,  "currency": "USD", "date": "2025-12-01"},
+    "ETH":          {"price": 34.61,  "currency": "USD", "date": "2026-05-29"},
+    "PLTR":         {"price": 154.50, "currency": "USD", "date": "2026-05-29"},
     "MSFT":         {"price": 419.40, "currency": "USD", "date": "2026-04-17"},
 
     "SFL":          {"price": 11.36,  "currency": "USD", "date": "2026-04-30"},
@@ -265,7 +267,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 21652.98,
+        "qty": 18378.50,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
