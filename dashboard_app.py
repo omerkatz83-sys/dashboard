@@ -256,7 +256,7 @@ default_stop_orders = {
 israeli_stocks = {
     "KSM_SP500": {
         "qty": 9682.00,
-        "default_price_ils": 3.433,
+        "default_price_ils": 3.4424,
         "yf_ticker": None,
         "funder_id": "5122957",  # קסם S&P 500 — משיכת מחיר מ-funder.co.il
         "funder_divisor": 100,    # מחיר funder לחלק ב-100 = מחיר ליחידה
