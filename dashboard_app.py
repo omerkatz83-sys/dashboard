@@ -42,7 +42,7 @@ cost_basis = {
     "AMZN":         {"price": 243.30, "currency": "USD", "date": "2025-12-01"},
     "COIN":         {"price": 385.60, "currency": "USD", "date": "2025-12-01"},
     "FBTC":         {"price": 88.74,  "currency": "USD", "date": "2026-05-11", "today_buy_qty": 20, "today_buy_price": 71.34},
-    "ETH":          {"price": 34.61,  "currency": "USD", "date": "2026-05-29"},
+    "ETH":          {"price": 34.61,  "currency": "USD", "date": "2025-12-01", "last_add_date": "2026-05-29", "last_add_qty": 26, "last_add_price": 18.98},
     "PLTR":         {"price": 154.50, "currency": "USD", "date": "2026-05-29"},
     "MSFT":         {"price": 419.40, "currency": "USD", "date": "2026-04-17"},
 
@@ -570,11 +570,20 @@ def get_data(portfolio):
             if cb and cb.get('date'):
                 from datetime import date as _date
                 try:
+                    _today_str = _date.today().isoformat()
                     buy_date = _date.fromisoformat(cb['date'])
-                    if buy_date == _date.today():
+                    # תוספת לפוזיציה קיימת (last_add_date) — מנגנון חדש
+                    if cb.get('last_add_date') == _today_str:
+                        _add_qty = cb.get('last_add_qty', 0)
+                        _add_price = cb.get('last_add_price', 0)
+                        _old_qty = info['qty'] - _add_qty
+                        if _old_qty > 0 and _add_qty > 0:
+                            prev_close = (prev_close * _old_qty + _add_price * _add_qty) / info['qty']
+                    # פוזיציה שנקנתה כולה היום — מנגנון ישן + תאימות לאחור
+                    elif buy_date == _date.today():
                         today_buy_qty = cb.get('today_buy_qty')
                         if today_buy_qty and today_buy_qty < info['qty']:
-                            # הוספה לפוזיציה קיימת: Prev Close ממוצע משוקלל
+                            # תמיכה בשדה ישן today_buy_qty
                             old_qty = info['qty'] - today_buy_qty
                             today_buy_price = cb.get('today_buy_price', cb['price'])
                             prev_close = (prev_close * old_qty + today_buy_price * today_buy_qty) / info['qty']
