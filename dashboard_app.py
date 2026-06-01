@@ -267,7 +267,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 17303.50,
+        "qty": 22476.50,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
