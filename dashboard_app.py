@@ -3451,6 +3451,7 @@ with tab4:
         "shachar":   {"name": "שחר",          "emoji": "👩‍🎓", "default_rate": 150},
         "itay_adva": {"name": "איתי ואדווה", "emoji": "👫",  "default_rate": 120},
         "itamar":    {"name": "איתמר",        "emoji": "🧑‍🎓", "default_rate": 150},
+        "other":     {"name": "אחר",           "emoji": "👤",  "default_rate": 0},
     }
 
     # --- טעינת נתונים ---
@@ -3478,7 +3479,9 @@ with tab4:
         lesson_date = st.date_input("תאריך", value=datetime.now().date(), key="lesson_date",
                                      min_value=datetime(2026, 1, 1).date())
     with add_cols[2]:
-        input_mode = st.radio("שיטת חישוב", ["⏱️ שעות × מחיר", "💵 סכום קבוע"], horizontal=True, key="lesson_mode")
+        _default_mode_index = 1 if selected_student == "other" else 0
+        input_mode = st.radio("שיטת חישוב", ["⏱️ שעות × מחיר", "💵 סכום קבוע"],
+                               horizontal=True, key="lesson_mode", index=_default_mode_index)
     
     if input_mode == "⏱️ שעות × מחיר":
         price_cols = st.columns([2, 2, 2])
@@ -3642,7 +3645,14 @@ with tab4:
 
                 # --- מסקנות לתלמיד ---
                 st.markdown("---")
-                _s_avg_rate = s_total / s_hours if s_hours > 0 else 0
+                # לתלמיד "אחר" — רק סיכום מספרי, ללא ניתוח
+                if student_key == "other":
+                    _sm_cols = st.columns(3)
+                    _sm_cols[0].metric("💰 הכנסה כוללת", f"₪{s_total:,.0f}")
+                    _sm_cols[1].metric("📅 שיעורים", f"{s_count}")
+                    _sm_cols[2].metric("⏱️ שעות", f"{s_hours:.1f}" if s_hours > 0 else "—")
+                    st.caption("ℹ️ שיעורים קצרי-טווח — לא נשמרים בשם.")
+                    continue
                 _s_default_rate = float(student_info.get("default_rate", 0))
                 _s_monthly_inc = {}
                 for _sl in student_lessons:
