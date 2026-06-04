@@ -258,6 +258,7 @@ default_stop_orders = {
     "PPA":   {"stop_price": 164.50, "currency": "USD"},
     "CCJ":   {"stop_price": 99.90,  "currency": "USD"},
     "AVGO":  {"stop_price": 395.90, "currency": "USD"},
+    "PLTR":  {"stop_price": 139.40, "currency": "USD"},
 }
 
 israeli_stocks = {
