@@ -33,6 +33,7 @@ portfolio = {
     "PPA":  {"qty": 15,  "type": "Satellite", "name": "Invesco Aerospace & Defense ETF"},
     "CCJ":  {"qty": 27,  "type": "Satellite", "name": "Cameco Corporation"},
     "AVGO": {"qty": 7,   "type": "Satellite", "name": "Broadcom"},
+    "APP":  {"qty": 4,   "type": "Satellite", "name": "AppLovin"},
 }
 
 # --- מחירי רכישה (Cost Basis) למניה ---
@@ -57,6 +58,7 @@ cost_basis = {
     "KSM_SP500":    {"price": 2.3603, "currency": "ILS", "date": "2026-05-19"},
     "CCJ":          {"price": 106.78, "currency": "USD", "date": "2026-05-27"},
     "AVGO":         {"price": 410.10, "currency": "USD", "date": "2026-06-04"},
+    "APP":          {"price": 563.00, "currency": "USD", "date": "2026-06-04"},
 }
 
 # --- Data Access Layer ---
@@ -270,7 +272,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 19375.80,
+        "qty": 17123.80,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
