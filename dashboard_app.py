@@ -34,6 +34,7 @@ portfolio = {
     "CCJ":  {"qty": 27,  "type": "Satellite", "name": "Cameco Corporation"},
     "AVGO": {"qty": 7,   "type": "Satellite", "name": "Broadcom"},
     "APP":  {"qty": 4,   "type": "Satellite", "name": "AppLovin"},
+    "IBIT": {"qty": 50,  "type": "Crypto",    "name": "iShares Bitcoin Trust"},
 }
 
 # --- מחירי רכישה (Cost Basis) למניה ---
@@ -59,6 +60,7 @@ cost_basis = {
     "CCJ":          {"price": 106.78, "currency": "USD", "date": "2026-05-27"},
     "AVGO":         {"price": 410.10, "currency": "USD", "date": "2026-06-04"},
     "APP":          {"price": 563.00, "currency": "USD", "date": "2026-06-04"},
+    "IBIT":         {"price": 36.25,  "currency": "USD", "date": "2026-06-08"},
 }
 
 # --- Data Access Layer ---
@@ -259,6 +261,7 @@ default_stop_orders = {
     "CCJ":   {"stop_price": 99.90,  "currency": "USD"},
     "AVGO":  {"stop_price": 395.90, "currency": "USD"},
     "PLTR":  {"stop_price": 139.40, "currency": "USD"},
+    "IBIT":  {"stop_price": 33.49,  "currency": "USD"},
 }
 
 israeli_stocks = {
@@ -273,7 +276,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 17123.80,
+        "qty": 16106.30,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
