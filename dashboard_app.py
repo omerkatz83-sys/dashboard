@@ -262,6 +262,7 @@ default_stop_orders = {
     "AVGO":  {"stop_price": 395.90, "currency": "USD"},
     "PLTR":  {"stop_price": 139.40, "currency": "USD"},
     "IBIT":  {"stop_price": 33.49,  "currency": "USD"},
+    "APP":   {"stop_price": 521.00, "currency": "USD"},
 }
 
 israeli_stocks = {
