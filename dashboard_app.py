@@ -22,7 +22,7 @@ portfolio = {
     "FBTC": {"qty": 57, "type": "Crypto", "name": "Fidelity Bitcoin"},
     "ETH": {"qty": 98, "type": "Crypto", "name": "Grayscale Ethereum Mini Trust"},
     "PLTR": {"qty": 18,  "type": "Satellite", "name": "Palantir Technologies"},
-    "MSFT": {"qty": 7, "type": "Satellite", "name": "Microsoft"},
+    "MSFT": {"qty": 6, "type": "Satellite", "name": "Microsoft"},
 
     "SFL":  {"qty": 200, "type": "Satellite", "name": "SFL Corporation"},
     "BKR":  {"qty": 35,  "type": "Satellite", "name": "Baker Hughes"},
@@ -35,6 +35,7 @@ portfolio = {
     "AVGO": {"qty": 7,   "type": "Satellite", "name": "Broadcom"},
     "APP":  {"qty": 4,   "type": "Satellite", "name": "AppLovin"},
     "IBIT": {"qty": 50,  "type": "Crypto",    "name": "iShares Bitcoin Trust"},
+    "KRE":  {"qty": 30,  "type": "Satellite", "name": "SPDR S&P Regional Banking ETF"},
 }
 
 # --- מחירי רכישה (Cost Basis) למניה ---
@@ -47,7 +48,7 @@ cost_basis = {
     "FBTC":         {"price": 88.74,  "currency": "USD", "date": "2026-05-11", "today_buy_qty": 20, "today_buy_price": 71.34},
     "ETH":          {"price": 34.61,  "currency": "USD", "date": "2025-12-01", "last_add_date": "2026-05-29", "last_add_qty": 26, "last_add_price": 18.98},
     "PLTR":         {"price": 154.50, "currency": "USD", "date": "2026-05-29"},
-    "MSFT":         {"price": 419.40, "currency": "USD", "date": "2026-04-17"},
+    "MSFT":         {"price": 403.00, "currency": "USD", "date": "2026-06-09"},
 
     "SFL":          {"price": 11.36,  "currency": "USD", "date": "2026-04-30"},
     "BKR":          {"price": 69.24,  "currency": "USD", "date": "2026-05-04"},
@@ -61,6 +62,7 @@ cost_basis = {
     "AVGO":         {"price": 410.10, "currency": "USD", "date": "2026-06-04"},
     "APP":          {"price": 563.00, "currency": "USD", "date": "2026-06-04"},
     "IBIT":         {"price": 36.25,  "currency": "USD", "date": "2026-06-08"},
+    "KRE":          {"price": 71.00,   "currency": "USD", "date": "2026-06-09"},
 }
 
 # --- Data Access Layer ---
@@ -249,7 +251,7 @@ db = SupabaseDatabase()
 default_stop_orders = {
     "IEFA":  {"stop_price": 88.50,  "currency": "USD"},
     "IEMG":  {"stop_price": 77.49,  "currency": "USD"},
-    "MSFT":  {"stop_price": 414.00, "currency": "USD"},
+    "MSFT":  {"stop_price": 397.90, "currency": "USD"},
 
     "SFL":   {"stop_price": 11.05,  "currency": "USD"},
     "BKR":   {"stop_price": 66.50,  "currency": "USD"},
@@ -263,6 +265,7 @@ default_stop_orders = {
     "PLTR":  {"stop_price": 139.40, "currency": "USD"},
     "IBIT":  {"stop_price": 33.49,  "currency": "USD"},
     "APP":   {"stop_price": 521.00, "currency": "USD"},
+    "KRE":   {"stop_price": 68.50,  "currency": "USD"},
 }
 
 israeli_stocks = {
@@ -277,7 +280,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 16106.30,
+        "qty": 11558.30,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
