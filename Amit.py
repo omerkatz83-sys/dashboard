@@ -13,12 +13,31 @@ from supabase import create_client, Client
 # --- עדכון עמלת מסחר ---
 TRADE_COMMISSION_USD = 2.00
 
-# --- הגדרת התיק (מחוץ לטאבים - משותף לכולם) ---
-# התיק מתחיל ריק לחלוטין
-portfolio = {}
+# --- הגדרת התיק ---
+portfolio = {
+    "APP":  {"qty": 0.1677, "type": "Satellite", "name": "AppLovin"},
+    "AVGO": {"qty": 7,      "type": "Satellite", "name": "Broadcom"},
+    "CIFR": {"qty": 94,     "type": "Crypto",    "name": "Cipher Digital"},
+    "ETHA": {"qty": 102,    "type": "Crypto",    "name": "iShares Ethereum Trust ETF"},
+    "IBIT": {"qty": 74,     "type": "Crypto",    "name": "iShares Bitcoin Trust ETF"},
+    "IEMG": {"qty": 60,     "type": "Core",      "name": "iShares Core MSCI Emerging"},
+    "KRE":  {"qty": 30,     "type": "Satellite", "name": "SPDR S&P Regional Banking ETF"},
+    "NVDA": {"qty": 45,     "type": "Satellite", "name": "NVIDIA"},
+    "OSTN": {"qty": 10,     "type": "Satellite", "name": "Ostin Technology Group"},
+}
 
-# --- מחירי רכישה (Cost Basis) למניה ---
-cost_basis = {}
+# --- מחירי רכישה (Cost Basis) ---
+cost_basis = {
+    "APP":  {"price": 496.45, "currency": "USD", "date": "2026-06-13"},
+    "AVGO": {"price": 382.57, "currency": "USD", "date": "2026-06-13"},
+    "CIFR": {"price": 24.52,  "currency": "USD", "date": "2026-06-13"},
+    "ETHA": {"price": 26.42,  "currency": "USD", "date": "2026-06-13"},
+    "IBIT": {"price": 36.04,  "currency": "USD", "date": "2026-06-13"},
+    "IEMG": {"price": 81.91,  "currency": "USD", "date": "2026-06-13"},
+    "KRE":  {"price": 73.41,  "currency": "USD", "date": "2026-06-13"},
+    "NVDA": {"price": 137.74, "currency": "USD", "date": "2026-06-13"},
+    "OSTN": {"price": 1.70,   "currency": "USD", "date": "2026-06-13"},
+}
 
 # --- Data Access Layer ---
 
@@ -239,7 +258,7 @@ default_stop_orders = {}
 # איפוס נכסים ישראליים למזומן התחלתי 0
 israeli_stocks = {
     "CASH_USD": {
-        "qty": 0.0,
+        "qty": 10330.44,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
@@ -1246,7 +1265,7 @@ with tab1:
             "P&L $": "${:+,.2f}",
             "Daily Chg %": "{:+.2f}%",
             "Daily Chg $": "${:+,.2f}",
-        }).map(
+        }, na_rep="—").map(
             lambda v: 'color: #00c853' if isinstance(v, (int, float)) and v > 0 else ('color: #ff1744' if isinstance(v, (int, float)) and v < 0 else ''),
             subset=['P&L %', 'P&L $', 'Daily Chg %', 'Daily Chg $']
         ))
@@ -1271,7 +1290,7 @@ with tab1:
                     "Value": "${:,.2f}",
                     "Portfolio %": "{:.2f}%",
                     "% מהקטגוריה": "{:.2f}%"
-                }), width='stretch')
+                }, na_rep="—"), width='stretch')
                 
                 fig_pie = px.pie(type_stocks, values='Value', names='Name', 
                                 title=f'התפלגות בתוך {asset_type}')
