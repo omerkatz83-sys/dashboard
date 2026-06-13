@@ -286,7 +286,7 @@ default_stop_orders = {
 israeli_stocks = {
     "KSM_SP500": {
         "qty": 9682.00,
-        "default_price_ils": 3.4424,
+        "default_price_ils": 3.3272,
         "yf_ticker": None,
         "funder_id": "5122957",  # קסם S&P 500 — משיכת מחיר מ-funder.co.il
         "funder_divisor": 100,    # מחיר funder לחלק ב-100 = מחיר ליחידה
@@ -1972,28 +1972,31 @@ with tab1:
 
         # ==================== הכנסה פסיבית מדיבידנדים ====================
         st.subheader("💰 הכנסה פסיבית מדיבידנדים")
-        
-        # נתוני דיבידנד ברירת מחדל (דיבידנד שנתי למניה $ — trailing 12 months)
-        default_dividends = {
-            "IEFA":   3.178,  # ~3.25% yield
-            "IEMG":   1.849,  # ~2.23% yield
-            "MSFT":   3.56,   # ~0.86% yield
-            "SFL":    0.47,   # ~4.06% yield
-            "BKR":    0.92,   # ~1.45% yield
-            "NVDA":   0.04,   # ~0.02% yield
-            "LIN":    6.10,   # ~1.19% yield
-            "PPA":    0.656,  # ~0.38% yield
+
+        # ערכי seed בלבד — ישמשו fallback לנכסים שלא עודכנו עדיין מה-API
+        _seed_dividends = {
+            "IEFA":   3.178,
+            "IEMG":   1.849,
+            "MSFT":   3.56,
+            "SFL":    0.47,
+            "BKR":    0.92,
+            "NVDA":   0.04,
+            "LIN":    6.10,
+            "PPA":    0.656,
         }
-        
-        # כפתור עדכון דיבידנדים מ-API
+
+        # רשימת כל הטיקרים הנוכחיים בתיק (US בלבד — לא ישראליים ולא מזומן)
+        _current_us_tickers = tuple(t for t in portfolio if t not in israeli_stocks)
+
+        # כפתור עדכון — שולח את כל הטיקרים הנוכחיים (לא רק ה-seed)
         div_col1, div_col2 = st.columns([1, 4])
         with div_col1:
             update_div = st.button("🔄 עדכן דיבידנדים", help="משיכת נתוני דיבידנד עדכניים מ-yfinance (לוקח ~30 שניות)")
-        
+
         if update_div:
             with st.spinner("⏳ מושך נתוני דיבידנד עדכניים..."):
                 fetch_live_dividends.clear()
-                live = fetch_live_dividends(tuple(default_dividends.keys()))
+                live = fetch_live_dividends(_current_us_tickers)
             if live:
                 st.session_state['live_dividends'] = live
                 with div_col2:
@@ -2001,33 +2004,36 @@ with tab1:
             else:
                 with div_col2:
                     st.warning("⚠️ לא הצליח לעדכן")
-        
-        # שימוש בנתונים live אם עודכנו, אחרת defaults
+
+        # בנה known_dividends:
+        # 1. seed רק לנכסים שעדיין בתיק
+        # 2. live data בעדיפות, גם לנכסים שנוספו לאחרונה
+        _base_div = {k: v for k, v in _seed_dividends.items() if k in portfolio}
         if 'live_dividends' in st.session_state:
-            known_dividends = {**default_dividends, **st.session_state['live_dividends']}
+            _live_for_portfolio = {k: v for k, v in st.session_state['live_dividends'].items() if k in portfolio}
+            known_dividends = {**_base_div, **_live_for_portfolio}
         else:
-            known_dividends = default_dividends
-        
+            known_dividends = _base_div
+
         div_rows = []
         total_annual_div_usd = 0
-        
+
         for ticker, div_per_share in known_dividends.items():
-            if ticker not in portfolio:
+            if div_per_share <= 0:
                 continue
             asset_row = df[df['Ticker'] == ticker]
             if asset_row.empty:
                 continue
-            
+
             price = float(asset_row['Price'].iloc[0])
-            asset_value = float(asset_row['Value'].iloc[0])
             qty = portfolio[ticker]['qty']
             info = portfolio[ticker]
-            
+
             annual_income = div_per_share * qty
             actual_yield = div_per_share / price * 100 if price > 0 else 0
-            
+
             total_annual_div_usd += annual_income
-            
+
             div_rows.append({
                 'שם': info['name'],
                 'טיקר': ticker,
@@ -2036,20 +2042,20 @@ with tab1:
                 'הכנסה שנתית ($)': annual_income,
                 'הכנסה שנתית (₪)': annual_income * usd_to_ils,
             })
-        
+
         if div_rows:
             div_df = pd.DataFrame(div_rows).sort_values('הכנסה שנתית ($)', ascending=False)
-            
+
             weighted_yield = (total_annual_div_usd / total_value * 100) if total_value > 0 else 0
             annual_ils = total_annual_div_usd * usd_to_ils
             monthly_ils = annual_ils / 12
-            
+
             dcol1, dcol2, dcol3, dcol4 = st.columns(4)
             dcol1.metric("🎯 Yield משוקלל של התיק", f"{weighted_yield:.2f}%")
             dcol2.metric("💵 הכנסה שנתית ($)", f"${total_annual_div_usd:,.2f}")
             dcol3.metric("💰 הכנסה שנתית (₪)", f"₪{annual_ils:,.0f}")
             dcol4.metric("📅 הכנסה חודשית (₪)", f"₪{monthly_ils:,.0f}")
-            
+
             st.dataframe(
                 div_df.style.format({
                     'Yield (%)': '{:.2f}%',
@@ -2059,11 +2065,16 @@ with tab1:
                 }),
                 width='stretch'
             )
-            
-            non_div_count = len(portfolio) - len(div_rows)
-            if non_div_count > 0:
-                st.caption(f"ℹ️ {non_div_count} נכסים בתיק לא מחלקים דיבידנד (VUAA.L, TSLA, IGV).")
-            st.caption("💡 סכומי הדיבידנד מבוססים על ברירת מחדל. לחץ '🔄 עדכן דיבידנדים' לקבלת נתונים עדכניים מ-yfinance.")
+
+            # הערה דינמית — מחשב בזמן אמת אילו נכסים לא מחלקים דיבידנד
+            _div_paying = {t for t in known_dividends if known_dividends[t] > 0 and t in portfolio}
+            _non_div = [t for t in _current_us_tickers if t not in _div_paying]
+            if _non_div:
+                _non_div_names = ", ".join(
+                    portfolio[t]['name'] for t in _non_div[:8]
+                ) + ("..." if len(_non_div) > 8 else "")
+                st.caption(f"ℹ️ {len(_non_div)} נכסים בתיק לא מחלקים דיבידנד: {_non_div_names}.")
+            st.caption("💡 לחץ '🔄 עדכן דיבידנדים' לקבלת נתונים עדכניים מ-yfinance עבור כל הנכסים הנוכחיים בתיק.")
         else:
             st.info("לא נמצאו נכסים מחלקי דיבידנד בתיק.")
 
