@@ -1812,6 +1812,69 @@ with tab1:
             else:
                 st.info("אין פקודות סטופ פעילות.")
 
+            # --- הוספת סטופ חדש לנכס שעדיין אין לו ---
+            _tickers_without_stop = [
+                t for t in all_assets
+                if t not in active_stops and t not in ('CASH_USD', 'CASH_ILS')
+            ]
+            if _tickers_without_stop:
+                st.markdown("**➕ הוסף פקודת סטופ חדשה:**")
+                _add_cols = st.columns([2, 1, 1, 1, 1])
+                with _add_cols[0]:
+                    _new_stop_asset = st.selectbox(
+                        "בחר נכס",
+                        _tickers_without_stop,
+                        format_func=lambda t: f"{t} — {all_assets[t]['name']}",
+                        key="add_stop_ticker"
+                    )
+                _new_asset_info = all_assets[_new_stop_asset]
+                _new_asset_currency = _new_asset_info['currency']
+                _new_sym = "₪" if _new_asset_currency == "ILS" else "$"
+                with _add_cols[1]:
+                    _new_stop_currency = st.selectbox(
+                        "מטבע סטופ",
+                        ["USD", "ILS"],
+                        index=0 if _new_asset_currency == "USD" else 1,
+                        key="add_stop_currency"
+                    )
+                _suggested_price = _new_asset_info['current_price']
+                if _new_stop_currency != _new_asset_currency:
+                    if _new_stop_currency == "ILS":
+                        _suggested_price = _new_asset_info['current_price'] * usd_to_ils
+                    else:
+                        _suggested_price = _new_asset_info['current_price'] / usd_to_ils
+                _sym_new = "₪" if _new_stop_currency == "ILS" else "$"
+                with _add_cols[2]:
+                    _new_stop_val = st.number_input(
+                        f"מחיר סטופ ({_sym_new})",
+                        min_value=0.001,
+                        value=round(float(_suggested_price) * 0.92, 2),
+                        step=0.01 if _new_stop_currency == "USD" else 1.0,
+                        key="add_stop_price"
+                    )
+                with _add_cols[3]:
+                    _trail_mode = st.checkbox("Trailing", key="add_stop_trailing")
+                with _add_cols[4]:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("➕ הוסף", key="add_stop_btn", use_container_width=True):
+                        if _trail_mode:
+                            _trail_pct = round((1 - _new_stop_val / _suggested_price) * 100, 1) if _suggested_price > 0 else 8.0
+                            active_stops[_new_stop_asset] = {
+                                'stop_price': round(_new_stop_val, 2),
+                                'currency': _new_stop_currency,
+                                'type': 'trailing',
+                                'trail_pct': max(_trail_pct, 1.0),
+                                'high_watermark': round(_suggested_price, 2),
+                            }
+                        else:
+                            active_stops[_new_stop_asset] = {
+                                'stop_price': round(_new_stop_val, 2),
+                                'currency': _new_stop_currency,
+                            }
+                        db.save_stop_orders(active_stops)
+                        st.success(f"✅ סטופ {_new_stop_asset} הוגדר ב-{_sym_new}{_new_stop_val:,.2f}")
+                        st.rerun()
+
             st.markdown("**💸 רישום מכירה ידנית:**")
             _manual_sale_tickers = [t for t in all_assets if t not in ('CASH_USD', 'CASH_ILS')]
             if _manual_sale_tickers:
