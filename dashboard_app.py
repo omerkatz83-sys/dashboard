@@ -586,7 +586,7 @@ def fetch_live_dividends(tickers_list):
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_notification_data(tickers_tuple):
-    """משיכת נתוני 52-week high + תאריך אקס-דיבידנד לכל הטיקרים"""
+    """משיכת נתוני 52-week high + תאריך אקס-דיבידנד + תאריך תשלום לכל הטיקרים"""
     data = {}
     for ticker in tickers_tuple:
         try:
@@ -596,6 +596,7 @@ def fetch_notification_data(tickers_tuple):
                 '52w_high': info.get('fiftyTwoWeekHigh'),
                 '52w_low': info.get('fiftyTwoWeekLow'),
                 'ex_div_date': info.get('exDividendDate'),   # unix timestamp
+                'div_date': info.get('dividendDate'),        # unix timestamp — תאריך תשלום בפועל
                 'div_rate': info.get('trailingAnnualDividendRate'),
                 'name': info.get('shortName', ticker),
             }
@@ -2053,9 +2054,11 @@ with tab1:
 
             total_annual_div_usd += annual_income
 
-            # תאריך חלוקה קרוב
-            _ex_date_str = "לא ידוע"
-            _ex_ts = _div_notif.get(ticker, {}).get('ex_div_date')
+            # תאריך Ex-Dividend ותאריך תשלום
+            _ex_date_str  = "לא ידוע"
+            _pay_date_str = "לא ידוע"
+            _ex_ts  = _div_notif.get(ticker, {}).get('ex_div_date')
+            _pay_ts = _div_notif.get(ticker, {}).get('div_date')
             if _ex_ts:
                 try:
                     _ex_dt = datetime.fromtimestamp(_ex_ts)
@@ -2069,6 +2072,19 @@ with tab1:
                         _ex_date_str = f"{_date_fmt} (עבר)"
                 except Exception:
                     pass
+            if _pay_ts:
+                try:
+                    _pay_dt = datetime.fromtimestamp(_pay_ts)
+                    _pdays = (_pay_dt - datetime.now()).days
+                    _pay_fmt = _pay_dt.strftime('%d/%m/%Y')
+                    if _pdays > 0:
+                        _pay_date_str = f"{_pay_fmt} (בעוד {_pdays} ימים)"
+                    elif _pdays == 0:
+                        _pay_date_str = f"{_pay_fmt} (היום!)"
+                    else:
+                        _pay_date_str = f"{_pay_fmt} (עבר)"
+                except Exception:
+                    pass
 
             div_rows.append({
                 'שם': info['name'],
@@ -2077,7 +2093,8 @@ with tab1:
                 'דיבידנד שנתי למניה ($)': div_per_share,
                 'הכנסה שנתית ($)': annual_income,
                 'הכנסה שנתית (₪)': annual_income * usd_to_ils,
-                'תאריך Ex-Dividend': _ex_date_str,
+                'Ex-Dividend': _ex_date_str,
+                'תאריך תשלום': _pay_date_str,
             })
 
         if div_rows:
@@ -2122,30 +2139,43 @@ with tab1:
                 (r['ticker'], r['ex_date']) for r in _received_divs
             }
 
-            # מצא דיבידנדים שה-ex-date עבר ועדיין לא אושרו (בחלון של 60 יום אחורה)
+            # מצא דיבידנדים שתאריך התשלום עבר ועדיין לא אושרו (בחלון של 60 יום אחורה)
             _pending_divs = []
             for _dr in div_rows:
                 _tk = _dr['טיקר']
                 _nd = _div_notif.get(_tk, {})
-                _ex_ts = _nd.get('ex_div_date')
-                if not _ex_ts:
+                # עדיפות: תאריך תשלום. fallback: ex_div_date + 30 יום (הערכה)
+                _pay_ts = _nd.get('div_date')
+                _ex_ts  = _nd.get('ex_div_date')
+                _ref_dt = None
+                _ref_source = None
+                if _pay_ts:
+                    try:
+                        _ref_dt = datetime.fromtimestamp(_pay_ts)
+                        _ref_source = 'payment'
+                    except Exception:
+                        pass
+                if _ref_dt is None and _ex_ts:
+                    try:
+                        _ref_dt = datetime.fromtimestamp(_ex_ts) + timedelta(days=30)
+                        _ref_source = 'ex+30d'
+                    except Exception:
+                        pass
+                if _ref_dt is None:
                     continue
-                try:
-                    _ex_dt = datetime.fromtimestamp(_ex_ts)
-                    _days_since = (datetime.now() - _ex_dt).days
-                    if 0 <= _days_since <= 60:  # עבר אבל לא יותר מ-60 יום
-                        _ex_date_key = _ex_dt.strftime('%Y-%m-%d')
-                        if (_tk, _ex_date_key) not in _confirmed_keys:
-                            _pending_divs.append({
-                                'ticker': _tk,
-                                'name': _dr['שם'],
-                                'ex_date': _ex_date_key,
-                                'ex_dt': _ex_dt,
-                                'div_per_share': _dr['דיבידנד שנתי למניה ($)'],
-                                'qty': portfolio[_tk]['qty'],
-                            })
-                except Exception:
-                    pass
+                _days_since = (datetime.now() - _ref_dt).days
+                if 0 <= _days_since <= 60:
+                    _pay_key = _ref_dt.strftime('%Y-%m-%d')
+                    if (_tk, _pay_key) not in _confirmed_keys:
+                        _pending_divs.append({
+                            'ticker': _tk,
+                            'name': _dr['שם'],
+                            'pay_date': _pay_key,
+                            'pay_dt': _ref_dt,
+                            'pay_source': _ref_source,
+                            'div_per_share': _dr['דיבידנד שנתי למניה ($)'],
+                            'qty': portfolio[_tk]['qty'],
+                        })
 
             if _pending_divs:
                 st.markdown("---")
@@ -2156,12 +2186,13 @@ with tab1:
                     _gross_est = round(_pd['div_per_share'] * _pd['qty'], 2)
                     _tax_est   = round(_gross_est * DIV_TAX_RATE, 2)
                     _net_est   = round(_gross_est - _tax_est, 2)
+                    _src_label = "" if _pd['pay_source'] == 'payment' else " (הערכה: Ex+30 יום)"
 
                     with st.container():
                         _pc1, _pc2, _pc3, _pc4, _pc5 = st.columns([2, 1, 1, 1, 1])
                         with _pc1:
                             st.markdown(f"**{_pd['name']}** ({_pd['ticker']})")
-                            st.caption(f"Ex-date: {_pd['ex_dt'].strftime('%d/%m/%Y')} | {_pd['qty']:.4g} יח'")
+                            st.caption(f"תשלום: {_pd['pay_dt'].strftime('%d/%m/%Y')}{_src_label} | {_pd['qty']:.4g} יח'")
                         with _pc2:
                             _actual_gross = st.number_input(
                                 "ברוטו ($)",
@@ -2178,11 +2209,11 @@ with tab1:
                         with _pc5:
                             st.markdown("<br>", unsafe_allow_html=True)
                             if st.button("✅ קיבלתי", key=f"confirm_div_{_pd['ticker']}_{_pd_idx}", use_container_width=True):
-                                # שמור רשומה
+                                # שמור רשומה — key לפי תאריך תשלום
                                 _received_divs.append({
                                     'ticker': _pd['ticker'],
                                     'name': _pd['name'],
-                                    'ex_date': _pd['ex_date'],
+                                    'ex_date': _pd['pay_date'],
                                     'confirmed_date': datetime.now().strftime('%Y-%m-%d %H:%M'),
                                     'qty': _pd['qty'],
                                     'gross_usd': round(_actual_gross, 2),
