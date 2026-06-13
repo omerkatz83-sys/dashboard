@@ -23,7 +23,6 @@ portfolio = {
     "IEMG": {"qty": 60,     "type": "Core",      "name": "iShares Core MSCI Emerging"},
     "KRE":  {"qty": 30,     "type": "Satellite", "name": "SPDR S&P Regional Banking ETF"},
     "NVDA": {"qty": 45,     "type": "Satellite", "name": "NVIDIA"},
-    "OSTN": {"qty": 10,     "type": "Satellite", "name": "Ostin Technology Group"},
 }
 
 # --- מחירי רכישה (Cost Basis) ---
@@ -36,7 +35,7 @@ cost_basis = {
     "IEMG": {"price": 81.91,  "currency": "USD", "date": "2026-06-13"},
     "KRE":  {"price": 73.41,  "currency": "USD", "date": "2026-06-13"},
     "NVDA": {"price": 137.74, "currency": "USD", "date": "2026-06-13"},
-    "OSTN": {"price": 1.70,   "currency": "USD", "date": "2026-06-13"},
+    "KSM_SP500": {"price": 3.3272, "currency": "ILS", "date": "2026-06-13"},
 }
 
 # --- Data Access Layer ---
@@ -257,6 +256,16 @@ default_stop_orders = {}
 
 # איפוס נכסים ישראליים למזומן התחלתי 0
 israeli_stocks = {
+    "KSM_SP500": {
+        "qty": 378.77,
+        "default_price_ils": 3.3272,
+        "yf_ticker": None,
+        "funder_id": "5122957",  # קסם S&P 500 — משיכת מחיר מ-funder.co.il
+        "funder_divisor": 100,    # מחיר funder לחלק ב-100 = מחיר ליחידה
+        "type": "Core",
+        "name": "S&P 500 (₪)",
+        "currency": "ILS"
+    },
     "CASH_USD": {
         "qty": 10330.44,
         "default_price_ils": 1.0,
