@@ -1346,6 +1346,131 @@ with tab1:
                                 title=f'התפלגות בתוך {asset_type}')
                 st.plotly_chart(fig_pie, width='stretch')
 
+        # ==================== רכישת מניה ====================
+        st.divider()
+        st.subheader("📥 רכישת מניה")
+
+        from datetime import date as _date_cls
+        _all_purchases = db.get_purchased_stocks()
+
+        _buy_cols1 = st.columns([2, 2, 1])
+        with _buy_cols1[0]:
+            _buy_ticker = st.text_input("טיקר (Ticker)", placeholder="לדוגמה: AAPL", key="buy_ticker").strip().upper()
+        with _buy_cols1[1]:
+            _buy_name = st.text_input("שם (אופציונלי)", placeholder="לדוגמה: Apple Inc.", key="buy_name").strip()
+        with _buy_cols1[2]:
+            _buy_type = st.selectbox("סוג", ["Satellite", "Core", "Crypto"], key="buy_type")
+
+        _buy_cols2 = st.columns([2, 2, 2])
+        with _buy_cols2[0]:
+            _buy_qty = st.number_input("כמות מניות", min_value=0.0001, value=1.0, step=1.0, format="%.4f", key="buy_qty")
+        with _buy_cols2[1]:
+            _buy_price = st.number_input("מחיר רכישה ($)", min_value=0.001, value=100.0, step=0.01, format="%.3f", key="buy_price")
+        with _buy_cols2[2]:
+            _buy_date = st.date_input("תאריך רכישה", value=_date_cls.today(), key="buy_date")
+
+        _buy_cols3 = st.columns([2, 2, 2])
+        with _buy_cols3[0]:
+            _buy_stop = st.number_input(
+                "סטופ לוס ($) — אופציונלי", min_value=0.0, value=0.0, step=0.01, format="%.2f",
+                key="buy_stop", help="השאר 0 אם אינך רוצה לקבוע סטופ"
+            )
+        with _buy_cols3[1]:
+            _buy_total_cost = _buy_qty * _buy_price + TRADE_COMMISSION_USD
+            st.metric("עלות כוללת + עמלה ($)", f"${_buy_total_cost:,.2f}")
+        with _buy_cols3[2]:
+            st.markdown("<br>", unsafe_allow_html=True)
+            _buy_submit = st.button(
+                "✅ שמור רכישה", key="buy_submit_btn", use_container_width=True,
+                disabled=not bool(_buy_ticker)
+            )
+
+        if _buy_submit:
+            if not _buy_ticker:
+                st.error("חובה להזין טיקר.")
+            elif _buy_qty <= 0:
+                st.error("כמות חייבת להיות גדולה מ-0.")
+            elif _buy_price <= 0:
+                st.error("מחיר חייב להיות גדול מ-0.")
+            else:
+                _buy_name_final = _buy_name if _buy_name else _buy_ticker
+                _buy_date_str = _buy_date.isoformat()
+                _new_purchase = {
+                    'ticker': _buy_ticker,
+                    'name': _buy_name_final,
+                    'type': _buy_type,
+                    'qty': round(float(_buy_qty), 4),
+                    'price': round(float(_buy_price), 4),
+                    'currency': 'USD',
+                    'date': _buy_date_str,
+                    'stop_price': round(float(_buy_stop), 2) if _buy_stop > 0 else None,
+                    'stop_currency': 'USD',
+                    'registered_at': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                }
+                _existing_purchases = db.get_purchased_stocks()
+                _existing_purchases.append(_new_purchase)
+                db.save_purchased_stocks(_existing_purchases)
+                # נכה עמלה ממזומן
+                _cash_state = _normalize_cash_state(db.get_extra_cash())
+                _cash_state['purchase_deductions_usd'] = round(
+                    _cash_state.get('purchase_deductions_usd', 0.0) + TRADE_COMMISSION_USD, 2
+                )
+                db.save_extra_cash(_cash_state)
+                # אם הוגדר סטופ — שמור ב-active stops
+                if _buy_stop > 0:
+                    _active_stops_buy = db.get_stop_orders(default_stop_orders.copy())
+                    _active_stops_buy[_buy_ticker] = {
+                        'stop_price': round(float(_buy_stop), 2),
+                        'currency': 'USD',
+                    }
+                    db.save_stop_orders(_active_stops_buy)
+                st.success(
+                    f"✅ נרשמה רכישה של **{_buy_ticker}** ({_buy_name_final}) — "
+                    f"{_buy_qty:.4g} יח' × ${_buy_price:,.3f} = ${_buy_qty * _buy_price:,.2f}"
+                    f" + עמלה ${TRADE_COMMISSION_USD:.2f}."
+                    + (f" סטופ לוס: ${_buy_stop:,.2f}" if _buy_stop > 0 else "")
+                )
+                st.rerun()
+
+        # טבלת רכישות שנרשמו
+        if _all_purchases:
+            with st.expander(f"📋 רכישות שנרשמו ({len(_all_purchases)})", expanded=True):
+                _purch_rows = []
+                for _p in reversed(_all_purchases):
+                    _p_stop = f"${_p['stop_price']:,.2f}" if _p.get('stop_price') else "—"
+                    _purch_rows.append({
+                        'תאריך': _p.get('date', '—'),
+                        'טיקר': _p['ticker'],
+                        'שם': _p['name'],
+                        'סוג': _p.get('type', '—'),
+                        'כמות': _p['qty'],
+                        'מחיר ($)': _p['price'],
+                        'סטופ לוס': _p_stop,
+                    })
+                st.dataframe(pd.DataFrame(_purch_rows), hide_index=True, use_container_width=True)
+
+                st.markdown("**מחיקת רכישה (שגיאה בהזנה):**")
+                _del_purch_opts = [
+                    f"{_p['ticker']} | {_p.get('date','—')} | {_p['qty']} יח' @ ${_p['price']}"
+                    for _p in _all_purchases
+                ]
+                _del_col1, _del_col2 = st.columns([4, 1])
+                with _del_col1:
+                    _del_purch_sel = st.selectbox("בחר רכישה למחיקה", _del_purch_opts, key="del_purch_sel")
+                with _del_col2:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("🗑️ מחק", key="del_purch_btn", use_container_width=True):
+                        _del_idx = _del_purch_opts.index(_del_purch_sel)
+                        _deleted_p = _all_purchases.pop(_del_idx)
+                        db.save_purchased_stocks(_all_purchases)
+                        _cash_state2 = _normalize_cash_state(db.get_extra_cash())
+                        _cash_state2['purchase_deductions_usd'] = max(
+                            round(_cash_state2.get('purchase_deductions_usd', 0.0) - TRADE_COMMISSION_USD, 2), 0.0
+                        )
+                        db.save_extra_cash(_cash_state2)
+                        st.success(f"🗑️ נמחקה רכישה: {_deleted_p['ticker']} {_deleted_p.get('date','')}")
+                        st.rerun()
+
         # ==================== STOP MARKET ORDERS ====================
         try:
             st.divider()
@@ -1773,125 +1898,6 @@ with tab1:
                         st.rerun()
             else:
                 st.info("אין נכסים זמינים לרישום מכירה ידנית.")
-
-            # ==================== רכישת מניה חדשה ====================
-            st.markdown("---")
-            st.markdown("**📥 רישום רכישת מניה:**")
-            with st.expander("➕ הוסף רכישה חדשה", expanded=False):
-                _buy_cols1 = st.columns([2, 2, 1])
-                with _buy_cols1[0]:
-                    _buy_ticker = st.text_input("טיקר (Ticker)", placeholder="לדוגמה: AAPL", key="buy_ticker").strip().upper()
-                with _buy_cols1[1]:
-                    _buy_name = st.text_input("שם (אופציונלי)", placeholder="לדוגמה: Apple Inc.", key="buy_name").strip()
-                with _buy_cols1[2]:
-                    _buy_type = st.selectbox("סוג", ["Satellite", "Core", "Crypto"], key="buy_type")
-
-                _buy_cols2 = st.columns([2, 2, 2])
-                with _buy_cols2[0]:
-                    _buy_qty = st.number_input("כמות מניות", min_value=0.0001, value=1.0, step=1.0, format="%.4f", key="buy_qty")
-                with _buy_cols2[1]:
-                    _buy_price = st.number_input("מחיר רכישה ($)", min_value=0.001, value=100.0, step=0.01, format="%.3f", key="buy_price")
-                with _buy_cols2[2]:
-                    from datetime import date as _date_cls
-                    _buy_date = st.date_input("תאריך רכישה", value=_date_cls.today(), key="buy_date")
-
-                _buy_cols3 = st.columns([2, 2, 2])
-                with _buy_cols3[0]:
-                    _buy_stop = st.number_input("סטופ לוס ($) — אופציונלי", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="buy_stop",
-                                                 help="השאר 0 אם אינך רוצה לקבוע סטופ")
-                with _buy_cols3[1]:
-                    _buy_total_cost = _buy_qty * _buy_price + TRADE_COMMISSION_USD
-                    st.metric("עלות כוללת + עמלה ($)", f"${_buy_total_cost:,.2f}")
-                with _buy_cols3[2]:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    _buy_submit = st.button("✅ שמור רכישה", key="buy_submit_btn", use_container_width=True,
-                                             disabled=not bool(_buy_ticker))
-
-                if _buy_submit:
-                    if not _buy_ticker:
-                        st.error("חובה להזין טיקר.")
-                    elif _buy_qty <= 0:
-                        st.error("כמות חייבת להיות גדולה מ-0.")
-                    elif _buy_price <= 0:
-                        st.error("מחיר חייב להיות גדול מ-0.")
-                    else:
-                        _buy_name_final = _buy_name if _buy_name else _buy_ticker
-                        _buy_date_str = _buy_date.isoformat()
-                        _new_purchase = {
-                            'ticker': _buy_ticker,
-                            'name': _buy_name_final,
-                            'type': _buy_type,
-                            'qty': round(float(_buy_qty), 4),
-                            'price': round(float(_buy_price), 4),
-                            'currency': 'USD',
-                            'date': _buy_date_str,
-                            'stop_price': round(float(_buy_stop), 2) if _buy_stop > 0 else None,
-                            'stop_currency': 'USD',
-                            'registered_at': datetime.now().strftime('%Y-%m-%d %H:%M'),
-                        }
-                        # שמור רכישה
-                        _existing_purchases = db.get_purchased_stocks()
-                        _existing_purchases.append(_new_purchase)
-                        db.save_purchased_stocks(_existing_purchases)
-                        # נכה עמלה ממזומן
-                        _cash_state = _normalize_cash_state(db.get_extra_cash())
-                        _cash_state['purchase_deductions_usd'] = round(
-                            _cash_state.get('purchase_deductions_usd', 0.0) + TRADE_COMMISSION_USD, 2
-                        )
-                        db.save_extra_cash(_cash_state)
-                        # אם הוגדר סטופ — שמור
-                        if _buy_stop > 0:
-                            _active_stops_buy = db.get_stop_orders(default_stop_orders.copy())
-                            _active_stops_buy[_buy_ticker] = {
-                                'stop_price': round(float(_buy_stop), 2),
-                                'currency': 'USD',
-                            }
-                            db.save_stop_orders(_active_stops_buy)
-                        st.success(
-                            f"✅ נרשמה רכישה של **{_buy_ticker}** ({_buy_name_final}) — "
-                            f"{_buy_qty:.4g} יח' × ${_buy_price:,.3f} = ${_buy_qty * _buy_price:,.2f} "
-                            f"+ עמלה ${TRADE_COMMISSION_USD:.2f}."
-                            + (f" סטופ לוס: ${_buy_stop:,.2f}" if _buy_stop > 0 else "")
-                        )
-                        st.rerun()
-
-                # הצג רשימת רכישות ידניות שמורות
-                _all_purchases = db.get_purchased_stocks()
-                if _all_purchases:
-                    st.markdown("**רכישות שנרשמו:**")
-                    _purch_rows = []
-                    for _p in reversed(_all_purchases):
-                        _p_stop = f"${_p['stop_price']:,.2f}" if _p.get('stop_price') else "—"
-                        _purch_rows.append({
-                            'תאריך': _p.get('date', '—'),
-                            'טיקר': _p['ticker'],
-                            'שם': _p['name'],
-                            'סוג': _p.get('type', '—'),
-                            'כמות': _p['qty'],
-                            'מחיר ($)': _p['price'],
-                            'סטופ לוס': _p_stop,
-                        })
-                    st.dataframe(pd.DataFrame(_purch_rows), hide_index=True, use_container_width=True)
-
-                    # מחיקת רכישה
-                    st.markdown("**מחיקת רכישה (שגיאה):**")
-                    _del_purch_opts = [
-                        f"{_p['ticker']} | {_p.get('date','—')} | {_p['qty']} יח' @ ${_p['price']}"
-                        for _p in _all_purchases
-                    ]
-                    _del_purch_sel = st.selectbox("בחר רכישה למחיקה", _del_purch_opts, key="del_purch_sel")
-                    if st.button("🗑️ מחק רכישה", key="del_purch_btn"):
-                        _del_idx = _del_purch_opts.index(_del_purch_sel)
-                        _deleted_p = _all_purchases.pop(_del_idx)
-                        db.save_purchased_stocks(_all_purchases)
-                        # החזר עמלה למזומן
-                        _cash_state2 = _normalize_cash_state(db.get_extra_cash())
-                        _cash_state2['purchase_deductions_usd'] = max(
-                            round(_cash_state2.get('purchase_deductions_usd', 0.0) - TRADE_COMMISSION_USD, 2), 0.0
-                        )
-                        db.save_extra_cash(_cash_state2)
-                        st.success(f"🗑️ נמחקה רכישה: {_deleted_p['ticker']} {_deleted_p.get('date','')}")
-                        st.rerun()
 
             # היסטוריית מכירות ממומשות
             if executed_history:
