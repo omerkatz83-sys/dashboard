@@ -27,15 +27,15 @@ portfolio = {
 
 # --- מחירי רכישה (Cost Basis) ---
 cost_basis = {
-    "APP":  {"price": 496.45, "currency": "USD", "date": "2026-06-13"},
-    "AVGO": {"price": 382.57, "currency": "USD", "date": "2026-06-13"},
-    "CIFR": {"price": 24.52,  "currency": "USD", "date": "2026-06-13"},
+    "APP":  {"price": 521.75, "currency": "USD", "date": "2026-06-13"},
+    "AVGO": {"price": 379.79, "currency": "USD", "date": "2026-06-13"},
+    "CIFR": {"price": 21.27,  "currency": "USD", "date": "2026-06-13"},
     "ETHA": {"price": 26.42,  "currency": "USD", "date": "2026-06-13"},
-    "IBIT": {"price": 36.04,  "currency": "USD", "date": "2026-06-13"},
-    "IEMG": {"price": 81.91,  "currency": "USD", "date": "2026-06-13"},
-    "KRE":  {"price": 73.41,  "currency": "USD", "date": "2026-06-13"},
+    "IBIT": {"price": 39.24,  "currency": "USD", "date": "2026-06-13"},
+    "IEMG": {"price": 65.78,  "currency": "USD", "date": "2026-06-13"},
+    "KRE":  {"price": 71.31,  "currency": "USD", "date": "2026-06-13"},
     "NVDA": {"price": 137.74, "currency": "USD", "date": "2026-06-13"},
-    "KSM_SP500": {"price": 3.3272, "currency": "ILS", "date": "2026-06-13"},
+    "KSM_SP500": {"price": 2.2468, "currency": "ILS", "date": "2026-06-13"},
 }
 
 # --- Data Access Layer ---
