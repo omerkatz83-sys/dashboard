@@ -161,6 +161,15 @@ class LocalJSONDatabase:
     def save_purchased_stocks(self, data):
         self._save(self._purchased_stocks_file, data)
 
+    # --- Received Dividends ---
+    def get_received_dividends(self):
+        _dir = os.path.dirname(os.path.abspath(__file__))
+        return self._load(os.path.join(_dir, "received_dividends.json"), [])
+
+    def save_received_dividends(self, data):
+        _dir = os.path.dirname(os.path.abspath(__file__))
+        self._save(os.path.join(_dir, "received_dividends.json"), data)
+
 
 class SupabaseDatabase:
     """Supabase-based storage — same interface as LocalJSONDatabase."""
@@ -258,6 +267,13 @@ class SupabaseDatabase:
 
     def save_purchased_stocks(self, data):
         self._set("purchased_stocks", data)
+
+    # --- Received Dividends ---
+    def get_received_dividends(self):
+        return self._get("received_dividends", [])
+
+    def save_received_dividends(self, data):
+        self._set("received_dividends", data)
 
 
 db = SupabaseDatabase()
@@ -2018,6 +2034,9 @@ with tab1:
         div_rows = []
         total_annual_div_usd = 0
 
+        # שלוף תאריכי ex-dividend (מהcache — ללא קריאת API נוספת)
+        _div_notif = fetch_notification_data(_current_us_tickers)
+
         for ticker, div_per_share in known_dividends.items():
             if div_per_share <= 0:
                 continue
@@ -2034,6 +2053,23 @@ with tab1:
 
             total_annual_div_usd += annual_income
 
+            # תאריך חלוקה קרוב
+            _ex_date_str = "לא ידוע"
+            _ex_ts = _div_notif.get(ticker, {}).get('ex_div_date')
+            if _ex_ts:
+                try:
+                    _ex_dt = datetime.fromtimestamp(_ex_ts)
+                    _days = (_ex_dt - datetime.now()).days
+                    _date_fmt = _ex_dt.strftime('%d/%m/%Y')
+                    if _days > 0:
+                        _ex_date_str = f"{_date_fmt} (בעוד {_days} ימים)"
+                    elif _days == 0:
+                        _ex_date_str = f"{_date_fmt} (היום!)"
+                    else:
+                        _ex_date_str = f"{_date_fmt} (עבר)"
+                except Exception:
+                    pass
+
             div_rows.append({
                 'שם': info['name'],
                 'טיקר': ticker,
@@ -2041,6 +2077,7 @@ with tab1:
                 'דיבידנד שנתי למניה ($)': div_per_share,
                 'הכנסה שנתית ($)': annual_income,
                 'הכנסה שנתית (₪)': annual_income * usd_to_ils,
+                'תאריך Ex-Dividend': _ex_date_str,
             })
 
         if div_rows:
@@ -2061,7 +2098,7 @@ with tab1:
                     'Yield (%)': '{:.2f}%',
                     'דיבידנד שנתי למניה ($)': '${:.4f}',
                     'הכנסה שנתית ($)': '${:,.2f}',
-                    'הכנסה שנתית (₪)': '₪{:,.0f}'
+                    'הכנסה שנתית (₪)': '₪{:,.0f}',
                 }),
                 width='stretch'
             )
@@ -2075,6 +2112,123 @@ with tab1:
                 ) + ("..." if len(_non_div) > 8 else "")
                 st.caption(f"ℹ️ {len(_non_div)} נכסים בתיק לא מחלקים דיבידנד: {_non_div_names}.")
             st.caption("💡 לחץ '🔄 עדכן דיבידנדים' לקבלת נתונים עדכניים מ-yfinance עבור כל הנכסים הנוכחיים בתיק.")
+
+            # ==================== אישור קבלת דיבידנד ====================
+            DIV_TAX_RATE = 0.25  # מס 25%
+
+            _received_divs = db.get_received_dividends()
+            # בנה סט של (ticker, ex_date_str) שכבר אושרו
+            _confirmed_keys = {
+                (r['ticker'], r['ex_date']) for r in _received_divs
+            }
+
+            # מצא דיבידנדים שה-ex-date עבר ועדיין לא אושרו (בחלון של 60 יום אחורה)
+            _pending_divs = []
+            for _dr in div_rows:
+                _tk = _dr['טיקר']
+                _nd = _div_notif.get(_tk, {})
+                _ex_ts = _nd.get('ex_div_date')
+                if not _ex_ts:
+                    continue
+                try:
+                    _ex_dt = datetime.fromtimestamp(_ex_ts)
+                    _days_since = (datetime.now() - _ex_dt).days
+                    if 0 <= _days_since <= 60:  # עבר אבל לא יותר מ-60 יום
+                        _ex_date_key = _ex_dt.strftime('%Y-%m-%d')
+                        if (_tk, _ex_date_key) not in _confirmed_keys:
+                            _pending_divs.append({
+                                'ticker': _tk,
+                                'name': _dr['שם'],
+                                'ex_date': _ex_date_key,
+                                'ex_dt': _ex_dt,
+                                'div_per_share': _dr['דיבידנד שנתי למניה ($)'],
+                                'qty': portfolio[_tk]['qty'],
+                            })
+                except Exception:
+                    pass
+
+            if _pending_divs:
+                st.markdown("---")
+                st.markdown("### 💸 אישור קבלת דיבידנד")
+                st.caption("הדיבידנדים הבאים הגיעו לתאריך Ex-Dividend ועדיין לא אושרו. אשר קבלה כדי להוסיף למזומן (בניכוי 25% מס).")
+
+                for _pd_idx, _pd in enumerate(_pending_divs):
+                    _gross_est = round(_pd['div_per_share'] * _pd['qty'], 2)
+                    _tax_est   = round(_gross_est * DIV_TAX_RATE, 2)
+                    _net_est   = round(_gross_est - _tax_est, 2)
+
+                    with st.container():
+                        _pc1, _pc2, _pc3, _pc4, _pc5 = st.columns([2, 1, 1, 1, 1])
+                        with _pc1:
+                            st.markdown(f"**{_pd['name']}** ({_pd['ticker']})")
+                            st.caption(f"Ex-date: {_pd['ex_dt'].strftime('%d/%m/%Y')} | {_pd['qty']:.4g} יח'")
+                        with _pc2:
+                            _actual_gross = st.number_input(
+                                "ברוטו ($)",
+                                min_value=0.0, value=float(_gross_est), step=0.01, format="%.2f",
+                                key=f"div_gross_{_pd['ticker']}_{_pd_idx}",
+                                help="ערך ברירת מחדל מחושב. ניתן לעדכן לסכום שהתקבל בפועל."
+                            )
+                        with _pc3:
+                            _actual_tax = round(_actual_gross * DIV_TAX_RATE, 2)
+                            st.metric("מס 25% ($)", f"${_actual_tax:.2f}")
+                        with _pc4:
+                            _actual_net = round(_actual_gross - _actual_tax, 2)
+                            st.metric("נטו ($)", f"${_actual_net:.2f}")
+                        with _pc5:
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            if st.button("✅ קיבלתי", key=f"confirm_div_{_pd['ticker']}_{_pd_idx}", use_container_width=True):
+                                # שמור רשומה
+                                _received_divs.append({
+                                    'ticker': _pd['ticker'],
+                                    'name': _pd['name'],
+                                    'ex_date': _pd['ex_date'],
+                                    'confirmed_date': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                                    'qty': _pd['qty'],
+                                    'gross_usd': round(_actual_gross, 2),
+                                    'tax_usd': round(_actual_tax, 2),
+                                    'net_usd': round(_actual_net, 2),
+                                })
+                                db.save_received_dividends(_received_divs)
+                                # הוסף נטו למזומן
+                                _div_cash = _normalize_cash_state(db.get_extra_cash())
+                                _div_cash['sale_cash_usd'] = round(
+                                    _div_cash.get('sale_cash_usd', 0.0) + _actual_net, 2
+                                )
+                                db.save_extra_cash(_div_cash)
+                                st.success(
+                                    f"✅ דיבידנד {_pd['ticker']} אושר! "
+                                    f"ברוטו: ${_actual_gross:.2f} | מס: ${_actual_tax:.2f} | "
+                                    f"נטו שנוסף למזומן: **${_actual_net:.2f}**"
+                                )
+                                st.rerun()
+
+            # היסטוריית דיבידנדים שאושרו
+            if _received_divs:
+                with st.expander(f"📜 דיבידנדים שהתקבלו ({len(_received_divs)})", expanded=False):
+                    _rdiv_rows = []
+                    _total_net = 0.0
+                    for _r in reversed(_received_divs):
+                        _rdiv_rows.append({
+                            'תאריך אישור': _r.get('confirmed_date', '—'),
+                            'טיקר': _r['ticker'],
+                            'שם': _r['name'],
+                            'Ex-Date': _r.get('ex_date', '—'),
+                            'ברוטו ($)': _r.get('gross_usd', 0),
+                            'מס ($)': _r.get('tax_usd', 0),
+                            'נטו ($)': _r.get('net_usd', 0),
+                        })
+                        _total_net += _r.get('net_usd', 0)
+                    st.dataframe(
+                        pd.DataFrame(_rdiv_rows).style.format({
+                            'ברוטו ($)': '${:.2f}',
+                            'מס ($)': '${:.2f}',
+                            'נטו ($)': '${:.2f}',
+                        }),
+                        hide_index=True, use_container_width=True
+                    )
+                    st.metric("💵 סה״כ דיבידנדים שהתקבלו (נטו)", f"${_total_net:,.2f}")
+
         else:
             st.info("לא נמצאו נכסים מחלקי דיבידנד בתיק.")
 
