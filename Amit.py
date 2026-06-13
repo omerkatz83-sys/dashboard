@@ -257,7 +257,7 @@ default_stop_orders = {}
 # איפוס נכסים ישראליים למזומן התחלתי 0
 israeli_stocks = {
     "KSM_SP500": {
-        "qty": 378.77,
+        "qty": 37877.0,
         "default_price_ils": 3.3272,
         "yf_ticker": None,
         "funder_id": "5122957",  # קסם S&P 500 — משיכת מחיר מ-funder.co.il
