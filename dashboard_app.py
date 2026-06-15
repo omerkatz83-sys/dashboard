@@ -667,8 +667,10 @@ def get_data(portfolio):
                         _add_qty = cb.get('last_add_qty', 0)
                         _add_price = cb.get('last_add_price', 0)
                         _old_qty = info['qty'] - _add_qty
-                        if _old_qty > 0 and _add_qty > 0:
-                            prev_close = (prev_close * _old_qty + _add_price * _add_qty) / info['qty']
+                        if _old_qty == 0 and _add_qty > 0:
+                            # פוזיציה חדשה לגמרי שנקנתה היום — השינוי היומי מחושב ממחיר הקנייה
+                            prev_close = _add_price if _add_price > 0 else cb['price']
+                        # תוספת לפוזיציה קיימת (_old_qty > 0): prev_close נשאר מחיר השוק של אתמול
                     # פוזיציה שנקנתה כולה היום — מנגנון ישן + תאימות לאחור
                     elif buy_date == _date.today():
                         today_buy_qty = cb.get('today_buy_qty')
