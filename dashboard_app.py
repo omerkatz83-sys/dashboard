@@ -311,7 +311,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 7531.30,
+        "qty": 8088.20,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
@@ -773,7 +773,12 @@ with tab1:
     _total_deposited_ils = _saved_deposits.get("total_deposited_ils", 0.0)
     _sale_cash_usd = _saved_deposits.get("sale_cash_usd", 0.0)
     _sale_cash_ils = _saved_deposits.get("sale_cash_ils", 0.0)
-    _purchase_deductions_usd = _saved_deposits.get("purchase_deductions_usd", 0.0)
+    # חישוב דינמי — סך כל עלויות הרכישות שנרשמו + עמלות
+    _purchase_deductions_usd = round(sum(
+        float(_ps['qty']) * float(_ps['price']) + TRADE_COMMISSION_USD
+        for _ps in _purchased_stocks
+        if _ps.get('currency', 'USD') == 'USD'
+    ), 2)
     
     extra_cash_ils = st.sidebar.number_input(
         "💵 הפקדת מזומן חדשה (₪)",
@@ -1433,12 +1438,6 @@ with tab1:
                 _existing_purchases = db.get_purchased_stocks()
                 _existing_purchases.append(_new_purchase)
                 db.save_purchased_stocks(_existing_purchases)
-                # נכה עמלה ממזומן
-                _cash_state = _normalize_cash_state(db.get_extra_cash())
-                _cash_state['purchase_deductions_usd'] = round(
-                    _cash_state.get('purchase_deductions_usd', 0.0) + TRADE_COMMISSION_USD, 2
-                )
-                db.save_extra_cash(_cash_state)
                 # אם הוגדר סטופ — שמור ב-active stops
                 if _buy_stop > 0:
                     _active_stops_buy = db.get_stop_orders(default_stop_orders.copy())
@@ -1486,11 +1485,6 @@ with tab1:
                         _del_idx = _del_purch_opts.index(_del_purch_sel)
                         _deleted_p = _all_purchases.pop(_del_idx)
                         db.save_purchased_stocks(_all_purchases)
-                        _cash_state2 = _normalize_cash_state(db.get_extra_cash())
-                        _cash_state2['purchase_deductions_usd'] = max(
-                            round(_cash_state2.get('purchase_deductions_usd', 0.0) - TRADE_COMMISSION_USD, 2), 0.0
-                        )
-                        db.save_extra_cash(_cash_state2)
                         st.success(f"🗑️ נמחקה רכישה: {_deleted_p['ticker']} {_deleted_p.get('date','')}")
                         st.rerun()
 
