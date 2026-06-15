@@ -46,7 +46,7 @@ cost_basis = {
     "AMZN":         {"price": 243.30, "currency": "USD", "date": "2025-12-01"},
     "COIN":         {"price": 385.60, "currency": "USD", "date": "2025-12-01"},
     "FBTC":         {"price": 88.74,  "currency": "USD", "date": "2026-05-11"},
-    "ETH":          {"price": 30.57,  "currency": "USD", "date": "2026-06-15", "last_add_date": "2026-06-15", "last_add_qty": 32, "last_add_price": 17.25},
+    "ETH":          {"price": 30.57,  "currency": "USD", "date": "2025-12-01", "last_add_date": "2026-06-15", "last_add_qty": 32, "last_add_price": 17.25},
     "PLTR":         {"price": 154.50, "currency": "USD", "date": "2026-05-29"},
     "MSFT":         {"price": 403.00, "currency": "USD", "date": "2026-06-09"},
 
@@ -311,7 +311,7 @@ israeli_stocks = {
         "currency": "ILS"
     },
     "CASH_USD": {
-        "qty": 8088.20,
+        "qty": 7531.30,
         "default_price_ils": 1.0,
         "yf_ticker": None,
         "type": "Cash",
