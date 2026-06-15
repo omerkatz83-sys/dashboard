@@ -20,7 +20,7 @@ portfolio = {
     "AMZN": {"qty": 9, "type": "Satellite", "name": "Amazon"},
     "COIN": {"qty": 9, "type": "Crypto", "name": "Coinbase"},
     "FBTC": {"qty": 57, "type": "Crypto", "name": "Fidelity Bitcoin"},
-    "ETH": {"qty": 130, "type": "Crypto", "name": "Grayscale Ethereum Mini Trust"},
+    "ETH": {"qty": 98, "type": "Crypto", "name": "Grayscale Ethereum Mini Trust"},
     "PLTR": {"qty": 18,  "type": "Satellite", "name": "Palantir Technologies"},
     "MSFT": {"qty": 6, "type": "Satellite", "name": "Microsoft"},
 
@@ -46,7 +46,7 @@ cost_basis = {
     "AMZN":         {"price": 243.30, "currency": "USD", "date": "2025-12-01"},
     "COIN":         {"price": 385.60, "currency": "USD", "date": "2025-12-01"},
     "FBTC":         {"price": 88.74,  "currency": "USD", "date": "2026-05-11"},
-    "ETH":          {"price": 30.57,  "currency": "USD", "date": "2025-12-01", "last_add_date": "2026-06-15", "last_add_qty": 32, "last_add_price": 17.25},
+    "ETH":          {"price": 34.92,  "currency": "USD", "date": "2025-12-01"},
     "PLTR":         {"price": 154.50, "currency": "USD", "date": "2026-05-29"},
     "MSFT":         {"price": 403.00, "currency": "USD", "date": "2026-06-09"},
 
@@ -431,13 +431,17 @@ for _ps in _purchased_stocks:
         # טיקר קיים — הוסף כמות וחשב ממוצע משוקלל
         _existing_qty = float(portfolio[_pt]['qty'])
         _existing_price = float(cost_basis.get(_pt, {}).get('price', _add_price))
+        _original_date = cost_basis.get(_pt, {}).get('date', _buy_date[:10])
         _total_qty = _existing_qty + _add_qty
         portfolio[_pt]['qty'] = _total_qty
         if _total_qty > 0:
             cost_basis[_pt] = {
                 'price': round((_existing_price * _existing_qty + _add_price * _add_qty) / _total_qty, 4),
                 'currency': cost_basis.get(_pt, {}).get('currency', _add_currency),
-                'date': _buy_date[:10],
+                'date': _original_date,  # שמור תאריך רכישה מקורי — לא תאריך התוספת
+                'last_add_date': _buy_date[:10],
+                'last_add_qty': _add_qty,
+                'last_add_price': _add_price,
             }
     else:
         # טיקר חדש — צור ערך חדש
