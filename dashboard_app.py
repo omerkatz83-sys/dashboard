@@ -2015,7 +2015,10 @@ with tab1:
                 fetch_live_dividends.clear()
                 live = fetch_live_dividends(_current_us_tickers)
             if live:
-                st.session_state['live_dividends'] = live
+                # שמור ל-DB כדי שישמר בין רענונים
+                _div_cash_state = _normalize_cash_state(db.get_extra_cash())
+                _div_cash_state['saved_dividends'] = live
+                db.save_extra_cash(_div_cash_state)
                 with div_col2:
                     st.success(f"✅ עודכנו {len(live)} נכסים!")
             else:
@@ -2024,10 +2027,11 @@ with tab1:
 
         # בנה known_dividends:
         # 1. seed רק לנכסים שעדיין בתיק
-        # 2. live data בעדיפות, גם לנכסים שנוספו לאחרונה
+        # 2. live data שנשמרה ב-DB בעדיפות (לא נדרש רענון בכל פעם)
         _base_div = {k: v for k, v in _seed_dividends.items() if k in portfolio}
-        if 'live_dividends' in st.session_state:
-            _live_for_portfolio = {k: v for k, v in st.session_state['live_dividends'].items() if k in portfolio}
+        _saved_live_divs = _saved_deposits.get('saved_dividends', {})
+        if _saved_live_divs:
+            _live_for_portfolio = {k: v for k, v in _saved_live_divs.items() if k in portfolio}
             known_dividends = {**_base_div, **_live_for_portfolio}
         else:
             known_dividends = _base_div
@@ -2163,16 +2167,28 @@ with tab1:
                         pass
                 if _ref_dt is None:
                     continue
+
+                # סינון: אם קנינו את המניה אחרי ה-ex-date — לא מגיע דיבידנד
+                _ex_dt_obj = None
+                if _ex_ts:
+                    try:
+                        _ex_dt_obj = datetime.fromtimestamp(_ex_ts)
+                    except Exception:
+                        pass
+                if _ex_dt_obj is not None:
+                    _buy_date_str = cost_basis.get(_tk, {}).get('date', '')
+                    if _buy_date_str:
+                        try:
+                            _buy_dt = datetime.fromisoformat(_buy_date_str)
+                            if _buy_dt.date() > _ex_dt_obj.date():
+                                continue  # נקנה אחרי ה-ex-date — לא מגיע דיבידנד
+                        except Exception:
+                            pass
+
                 _days_since = (datetime.now() - _ref_dt).days
                 if 0 <= _days_since <= 60:
                     _pay_key = _ref_dt.strftime('%Y-%m-%d')
                     if (_tk, _pay_key) not in _confirmed_keys:
-                        _ex_dt_obj = None
-                        if _ex_ts:
-                            try:
-                                _ex_dt_obj = datetime.fromtimestamp(_ex_ts)
-                            except Exception:
-                                pass
                         _pending_divs.append({
                             'ticker': _tk,
                             'name': _dr['שם'],
@@ -2196,19 +2212,21 @@ with tab1:
                     _src_label = "" if _pd['pay_source'] == 'payment' else " (הערכה)"
 
                     with st.container():
-                        _pc1, _pc2, _pc3, _pc4, _pc5 = st.columns([2, 1, 1, 1, 1])
+                        _pc1, _pc2, _pc3, _pc4, _pc5 = st.columns([3, 1, 1, 1, 1])
                         with _pc1:
-                            st.markdown(f"**{_pd['name']}** ({_pd['ticker']}) | {_pd['qty']:.4g} יח'")
-                            _cd1, _cd2 = st.columns(2)
                             _ex_default = _pd['ex_dt'].date() if _pd.get('ex_dt') else _pd['pay_dt'].date()
                             _pay_default = _pd['pay_dt'].date()
-                            with _cd1:
+                            _src_label = "" if _pd['pay_source'] == 'payment' else " (הערכה)"
+                            _dc1, _dc2, _dc3 = st.columns([2, 1, 1])
+                            with _dc1:
+                                st.markdown(f"**{_pd['name']}** ({_pd['ticker']}) | {_pd['qty']:.4g} יח'")
+                            with _dc2:
                                 _input_ex_date = st.date_input(
                                     f"Ex-Date{_src_label}",
                                     value=_ex_default,
                                     key=f"ex_d_{_pd['ticker']}_{_pd_idx}",
                                 )
-                            with _cd2:
+                            with _dc3:
                                 _input_pay_date = st.date_input(
                                     "תשלום",
                                     value=_pay_default,
