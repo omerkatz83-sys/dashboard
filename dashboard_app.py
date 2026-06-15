@@ -2134,9 +2134,9 @@ with tab1:
             DIV_TAX_RATE = 0.25  # מס 25%
 
             _received_divs = db.get_received_dividends()
-            # בנה סט של (ticker, ex_date_str) שכבר אושרו
+            # בנה סט של (ticker, pay_date) שכבר אושרו — תמיכה בפורמט ישן ע"י fallback ל-ex_date
             _confirmed_keys = {
-                (r['ticker'], r['ex_date']) for r in _received_divs
+                (r['ticker'], r.get('pay_date', r.get('ex_date'))) for r in _received_divs
             }
 
             # מצא דיבידנדים שתאריך התשלום עבר ועדיין לא אושרו (בחלון של 60 יום אחורה)
@@ -2167,11 +2167,18 @@ with tab1:
                 if 0 <= _days_since <= 60:
                     _pay_key = _ref_dt.strftime('%Y-%m-%d')
                     if (_tk, _pay_key) not in _confirmed_keys:
+                        _ex_dt_obj = None
+                        if _ex_ts:
+                            try:
+                                _ex_dt_obj = datetime.fromtimestamp(_ex_ts)
+                            except Exception:
+                                pass
                         _pending_divs.append({
                             'ticker': _tk,
                             'name': _dr['שם'],
                             'pay_date': _pay_key,
                             'pay_dt': _ref_dt,
+                            'ex_dt': _ex_dt_obj,
                             'pay_source': _ref_source,
                             'div_per_share': _dr['דיבידנד שנתי למניה ($)'],
                             'qty': portfolio[_tk]['qty'],
@@ -2186,13 +2193,27 @@ with tab1:
                     _gross_est = round(_pd['div_per_share'] * _pd['qty'], 2)
                     _tax_est   = round(_gross_est * DIV_TAX_RATE, 2)
                     _net_est   = round(_gross_est - _tax_est, 2)
-                    _src_label = "" if _pd['pay_source'] == 'payment' else " (הערכה: Ex+30 יום)"
+                    _src_label = "" if _pd['pay_source'] == 'payment' else " (הערכה)"
 
                     with st.container():
                         _pc1, _pc2, _pc3, _pc4, _pc5 = st.columns([2, 1, 1, 1, 1])
                         with _pc1:
-                            st.markdown(f"**{_pd['name']}** ({_pd['ticker']})")
-                            st.caption(f"תשלום: {_pd['pay_dt'].strftime('%d/%m/%Y')}{_src_label} | {_pd['qty']:.4g} יח'")
+                            st.markdown(f"**{_pd['name']}** ({_pd['ticker']}) | {_pd['qty']:.4g} יח'")
+                            _cd1, _cd2 = st.columns(2)
+                            _ex_default = _pd['ex_dt'].date() if _pd.get('ex_dt') else _pd['pay_dt'].date()
+                            _pay_default = _pd['pay_dt'].date()
+                            with _cd1:
+                                _input_ex_date = st.date_input(
+                                    f"Ex-Date{_src_label}",
+                                    value=_ex_default,
+                                    key=f"ex_d_{_pd['ticker']}_{_pd_idx}",
+                                )
+                            with _cd2:
+                                _input_pay_date = st.date_input(
+                                    "תשלום",
+                                    value=_pay_default,
+                                    key=f"pay_d_{_pd['ticker']}_{_pd_idx}",
+                                )
                         with _pc2:
                             _actual_gross = st.number_input(
                                 "ברוטו ($)",
@@ -2209,11 +2230,11 @@ with tab1:
                         with _pc5:
                             st.markdown("<br>", unsafe_allow_html=True)
                             if st.button("✅ קיבלתי", key=f"confirm_div_{_pd['ticker']}_{_pd_idx}", use_container_width=True):
-                                # שמור רשומה — key לפי תאריך תשלום
                                 _received_divs.append({
                                     'ticker': _pd['ticker'],
                                     'name': _pd['name'],
-                                    'ex_date': _pd['pay_date'],
+                                    'ex_date': _input_ex_date.isoformat(),
+                                    'pay_date': _input_pay_date.isoformat(),
                                     'confirmed_date': datetime.now().strftime('%Y-%m-%d %H:%M'),
                                     'qty': _pd['qty'],
                                     'gross_usd': round(_actual_gross, 2),
@@ -2245,6 +2266,7 @@ with tab1:
                             'טיקר': _r['ticker'],
                             'שם': _r['name'],
                             'Ex-Date': _r.get('ex_date', '—'),
+                            'תאריך תשלום': _r.get('pay_date', _r.get('ex_date', '—')),
                             'ברוטו ($)': _r.get('gross_usd', 0),
                             'מס ($)': _r.get('tax_usd', 0),
                             'נטו ($)': _r.get('net_usd', 0),
