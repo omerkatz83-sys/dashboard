@@ -22,11 +22,10 @@ portfolio = {
     "FBTC": {"qty": 57, "type": "Crypto", "name": "Fidelity Bitcoin"},
     "ETH": {"qty": 98, "type": "Crypto", "name": "Grayscale Ethereum Mini Trust"},
     "PLTR": {"qty": 18,  "type": "Satellite", "name": "Palantir Technologies"},
-    "MSFT": {"qty": 6, "type": "Satellite", "name": "Microsoft"},
 
     "SFL":  {"qty": 200, "type": "Satellite", "name": "SFL Corporation"},
     "BKR":  {"qty": 35,  "type": "Satellite", "name": "Baker Hughes"},
-    "IGV":  {"qty": 30,  "type": "Satellite", "name": "iShares Expanded Tech-Software"},
+    "IGV":  {"qty": 36,  "type": "Satellite", "name": "iShares Expanded Tech-Software"},
     "NVDA": {"qty": 35,  "type": "Satellite", "name": "Nvidia"},
     "TSLA": {"qty": 7,   "type": "Satellite", "name": "Tesla"},
     "LIN":  {"qty": 7,   "type": "Satellite", "name": "Linde PLC"},
@@ -52,7 +51,7 @@ cost_basis = {
 
     "SFL":          {"price": 11.36,  "currency": "USD", "date": "2026-04-30"},
     "BKR":          {"price": 69.24,  "currency": "USD", "date": "2026-05-04"},
-    "IGV":          {"price": 91.03,  "currency": "USD", "date": "2026-05-15"},
+    "IGV":          {"price": 91.40,  "currency": "USD", "date": "2026-05-15"},
     "NVDA":         {"price": 216.21, "currency": "USD", "date": "2026-05-26"},
     "TSLA":         {"price": 428.18, "currency": "USD", "date": "2026-05-26"},
     "LIN":          {"price": 509.00, "currency": "USD", "date": "2026-05-13"},
@@ -282,11 +281,9 @@ db = SupabaseDatabase()
 default_stop_orders = {
     "IEFA":  {"stop_price": 88.50,  "currency": "USD"},
     "IEMG":  {"stop_price": 77.49,  "currency": "USD"},
-    "MSFT":  {"stop_price": 397.90, "currency": "USD"},
-
-    "SFL":   {"stop_price": 11.05,  "currency": "USD"},
+    "PLTR":  {"stop_price": 139.40, "currency": "USD"},
     "BKR":   {"stop_price": 66.50,  "currency": "USD"},
-    "IGV":   {"stop_price": 88.00,  "currency": "USD"},
+    "IGV":   {"stop_price": 87.00,  "currency": "USD"},
     "NVDA":  {"stop_price": 212.00, "currency": "USD"},
     "TSLA":  {"stop_price": 403.00, "currency": "USD"},
     "LIN":   {"stop_price": 495.00, "currency": "USD"},
