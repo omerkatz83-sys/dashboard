@@ -12,6 +12,17 @@ from supabase import create_client, Client
 
 TRADE_COMMISSION_USD = 4.90
 
+# Yahoo Finance uses exchange-qualified symbols for some non-US listings.
+# Keep aliases centralized so manually entered purchases resolve consistently.
+YAHOO_TICKER_ALIASES = {
+    "CNDX": "CNDX.L",  # iShares NASDAQ 100 UCITS ETF USD (LSE)
+}
+
+
+def normalize_market_ticker(ticker):
+    normalized = str(ticker or "").strip().upper()
+    return YAHOO_TICKER_ALIASES.get(normalized, normalized)
+
 # --- הגדרת התיק (מחוץ לטאבים - משותף לכולם) ---
 portfolio = {
     "VUAA.L": {"qty": 190, "type": "Core", "name": "S&P 500"},
@@ -293,6 +304,7 @@ default_stop_orders = {
     "IBIT":  {"stop_price": 33.49,  "currency": "USD"},
     "APP":   {"stop_price": 521.00, "currency": "USD"},
     "KRE":   {"stop_price": 68.50,  "currency": "USD"},
+    "XBI":   {"stop_price": 141.00, "currency": "USD"},
 }
 
 israeli_stocks = {
@@ -413,7 +425,7 @@ for _t, _sale_date in _latest_sale_date.items():
 # --- טעינת רכישות ידניות שנשמרו דרך הדשבורד ---
 _purchased_stocks = db.get_purchased_stocks()
 for _ps in _purchased_stocks:
-    _pt = _ps['ticker']
+    _pt = normalize_market_ticker(_ps['ticker'])
     # בדוק אם נמכרה אחרי — אם כן, אל תוסיף
     _last_sale = _latest_sale_date.get(_pt, '')
     _buy_date = _ps.get('date', '')
@@ -1379,7 +1391,13 @@ with tab1:
 
         _buy_cols1 = st.columns([2, 2, 1])
         with _buy_cols1[0]:
-            _buy_ticker = st.text_input("טיקר (Ticker)", placeholder="לדוגמה: AAPL", key="buy_ticker").strip().upper()
+            _buy_ticker = normalize_market_ticker(
+                st.text_input(
+                    "טיקר (Ticker)",
+                    placeholder="לדוגמה: AAPL (CNDX מזוהה אוטומטית כ-CNDX.L)",
+                    key="buy_ticker",
+                )
+            )
         with _buy_cols1[1]:
             _buy_name = st.text_input("שם (אופציונלי)", placeholder="לדוגמה: Apple Inc.", key="buy_name").strip()
         with _buy_cols1[2]:
