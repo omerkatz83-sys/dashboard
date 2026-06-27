@@ -450,6 +450,13 @@ def _purchase_is_after_sale(purchase_record, latest_sale_value):
     return purchase_ts > sale_ts
 
 
+def _sale_is_reflected_in_base_position(sale_date, base_purchase_date):
+    """Base positions already represent sales made on or before their cost-basis date."""
+    if not base_purchase_date:
+        return False
+    return str(sale_date or '')[:10] <= str(base_purchase_date)[:10]
+
+
 def _is_valid_purchase_record(record):
     if not isinstance(record, dict) or not record.get('ticker') or record.get('archived_at'):
         return False
@@ -576,10 +583,11 @@ for _sold in _sold_stocks:
     if _t not in _latest_sale_date or _sd > _latest_sale_date[_t]:
         _latest_sale_date[_t] = _sd
 for _t, _sale_date in _latest_sale_date.items():
-    # הסר רק אם תאריך המכירה האחרון הוא אחרי תאריך הרכישה הנוכחי
+    # פוזיציות הבסיס מייצגות את היתרה הנוכחית לאחר עסקאות היסטוריות.
+    # לכן מכירה ישנה מאותו יום של תאריך העלות אינה סוגרת שוב את היתרה הנוכחית.
     _purchase_date_cb = cost_basis.get(_t, {}).get('date', '')
-    if _purchase_date_cb and _sale_date[:10] < _purchase_date_cb:
-        continue  # נקנה מחדש אחרי המכירה — לא להסיר
+    if _sale_is_reflected_in_base_position(_sale_date, _purchase_date_cb):
+        continue  # המכירה כבר מגולמת בפוזיציית הבסיס, או קדמה לה
     # הסר מ-portfolio (US stocks)
     if _t in portfolio:
         del portfolio[_t]
