@@ -6,6 +6,8 @@ import plotly.express as px
 import numpy as np
 import os
 import json
+import math
+import uuid
 import requests
 from datetime import datetime, timedelta
 from supabase import create_client, Client
@@ -22,6 +24,63 @@ YAHOO_TICKER_ALIASES = {
 def normalize_market_ticker(ticker):
     normalized = str(ticker or "").strip().upper()
     return YAHOO_TICKER_ALIASES.get(normalized, normalized)
+
+
+LEGACY_LESSON_STUDENT_ALIASES = {
+    "shachar_itay_adva": "itay_adva",
+}
+
+
+def _lesson_number(value, default=0.0):
+    """Return a finite float for legacy lesson fields, or None if invalid."""
+    if value in (None, ""):
+        value = default
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def normalize_lesson_record(record, source_index):
+    """Build a safe analytics view without mutating or dropping the stored record."""
+    if not isinstance(record, dict):
+        return None, "הרשומה אינה אובייקט נתונים"
+
+    raw_date = str(record.get("date", "")).strip()
+    try:
+        lesson_date = datetime.strptime(raw_date[:10], "%Y-%m-%d").strftime("%Y-%m-%d")
+    except (TypeError, ValueError):
+        return None, "תאריך חסר או לא תקין"
+
+    total = _lesson_number(record.get("total"), default=None)
+    duration = _lesson_number(record.get("duration"))
+    rate = _lesson_number(record.get("price_per_hour"), default=None)
+    if total is None or total < 0:
+        return None, "סכום חסר או לא תקין"
+    if duration is None or duration < 0:
+        return None, "משך שיעור לא תקין"
+    if rate is None or rate < 0 or (rate == 0 and duration > 0 and total > 0):
+        rate = total / duration if duration > 0 else 0.0
+
+    student = str(record.get("student") or "other").strip()
+    student = LEGACY_LESSON_STUDENT_ALIASES.get(student, student)
+    payment = record.get("payment", record.get("note", "לא ידוע"))
+
+    return {
+        "_source_index": source_index,
+        "_archived": bool(record.get("archived_at")),
+        "id": str(record.get("id") or ""),
+        "student": student,
+        "student_name": str(record.get("student_name") or "").strip(),
+        "date": lesson_date,
+        "duration": duration,
+        "price_per_hour": rate,
+        "total": total,
+        "payment": payment,
+        "mode": record.get("mode", "legacy"),
+        "archived_at": record.get("archived_at"),
+    }, None
 
 # --- הגדרת התיק (מחוץ לטאבים - משותף לכולם) ---
 portfolio = {
@@ -103,8 +162,9 @@ class LocalJSONDatabase:
         try:
             with open(path, 'w') as f:
                 json.dump(data, f, indent=2)
+            return True
         except Exception:
-            pass
+            return False
 
     # --- Stop Orders ---
     def get_stop_orders(self, default=None):
@@ -137,7 +197,7 @@ class LocalJSONDatabase:
         return self._load(self._lessons_file, default)
 
     def save_lessons_data(self, data):
-        self._save(self._lessons_file, data)
+        return self._save(self._lessons_file, data)
 
     # --- Extra Cash ---
     def get_extra_cash(self):
@@ -203,8 +263,9 @@ class SupabaseDatabase:
     def _set(self, row_id, payload):
         try:
             self._client.table(self.TABLE).upsert({"id": row_id, "data": payload}).execute()
+            return True
         except Exception:
-            pass
+            return False
 
     def _exists(self, row_id):
         try:
@@ -244,7 +305,7 @@ class SupabaseDatabase:
         return self._get("lessons", default)
 
     def save_lessons_data(self, data):
-        self._set("lessons", data)
+        return self._set("lessons", data)
 
     # --- Extra Cash ---
     def get_extra_cash(self):
@@ -2524,9 +2585,10 @@ with tab1:
         st.info("טיפ: וודא שהטיקרים נכונים ושיש חיבור לאינטרנט.")
 
 
-# ==================== TAB 4: שיעורים פרטיים ====================
+# ==================== TAB 3: שיעורים פרטיים ====================
 with tab3:
     st.title("📚 שיעורים פרטיים — מעקב הכנסות")
+    st.caption("כל הנתונים נשמרים ב-Supabase. עריכה שומרת היסטוריה, והסרה מהתצוגה מתבצעת בארכיון שניתן לשחזר.")
 
     # --- הגדרת תלמידים ---
     STUDENTS = {
@@ -2537,34 +2599,90 @@ with tab3:
         "other":     {"name": "אחר",           "emoji": "👤",  "default_rate": 0},
     }
 
-    # --- טעינת נתונים ---
-    lessons_data = db.get_lessons_data({"lessons": [], "students": list(STUDENTS.keys())})
-    if "lessons" not in lessons_data:
+    # --- טעינת נתונים: לעולם לא מוחקים או מחליפים רשומות ישנות בזמן קריאה ---
+    _lessons_state = db.get_lessons_data({"lessons": [], "students": list(STUDENTS.keys())})
+    _lessons_ready = True
+    if isinstance(_lessons_state, list):
+        # תאימות לפורמט ישן שבו נשמרה רשימת שיעורים ישירות.
+        lessons_data = {"lessons": _lessons_state, "students": list(STUDENTS.keys())}
+    elif isinstance(_lessons_state, dict):
+        lessons_data = dict(_lessons_state)
+        if "lessons" not in lessons_data:
+            lessons_data["lessons"] = []
+        lessons_data.setdefault("students", list(STUDENTS.keys()))
+    else:
         lessons_data = {"lessons": [], "students": list(STUDENTS.keys())}
-    # מיגרציה — מפתח ישן → חדש
-    _migrated = False
-    for _l in lessons_data.get("lessons", []):
-        if _l.get("student") == "shachar_itay_adva":
-            _l["student"] = "itay_adva"
-            _migrated = True
-    if _migrated:
-        db.save_lessons_data(lessons_data)
+        _lessons_ready = False
+        st.error("מבנה נתוני השיעורים אינו תקין. לא יבוצע שום שינוי עד לתיקון הנתונים.")
+
+    if not isinstance(lessons_data.get("lessons"), list):
+        _lessons_ready = False
+        st.error("שדה השיעורים אינו רשימה. הנתונים נשמרו ללא שינוי ופעולות הכתיבה הושבתו.")
+        _stored_lessons = []
+    else:
+        _stored_lessons = lessons_data["lessons"]
+
+    _active_lessons = []
+    _archived_lessons = []
+    _invalid_lessons = []
+    for _lesson_idx, _stored_lesson in enumerate(_stored_lessons):
+        _lesson_view, _lesson_error = normalize_lesson_record(_stored_lesson, _lesson_idx)
+        if _lesson_error:
+            _invalid_lessons.append((_lesson_idx, _lesson_error))
+        elif _lesson_view["_archived"]:
+            _archived_lessons.append(_lesson_view)
+        else:
+            _active_lessons.append(_lesson_view)
+
+    # הצג גם תלמידים היסטוריים שאינם קיימים יותר ברשימה הקבועה.
+    for _known_lesson in _active_lessons + _archived_lessons:
+        _student_key = _known_lesson["student"]
+        if _student_key not in STUDENTS:
+            STUDENTS[_student_key] = {
+                "name": _known_lesson.get("student_name") or _student_key,
+                "emoji": "👤",
+                "default_rate": 0,
+            }
+
+    def _lesson_student_display(_lesson):
+        if _lesson.get("student_name"):
+            return _lesson["student_name"]
+        return STUDENTS.get(_lesson["student"], {}).get("name", _lesson["student"])
+
+    if _invalid_lessons:
+        st.warning(
+            f"נמצאו {len(_invalid_lessons)} רשומות ישנות שלא ניתן לנתח. "
+            "הן נשארו שמורות ללא שינוי ואינן נכללות בחישובים."
+        )
+        with st.expander("פרטי רשומות שדורשות בדיקה"):
+            for _bad_idx, _bad_reason in _invalid_lessons:
+                st.write(f"רשומה #{_bad_idx + 1}: {_bad_reason}")
+
+    if _archived_lessons:
+        st.info(f"🗄️ {len(_archived_lessons)} שיעורים נמצאים בארכיון ואינם נכללים בחישובים.")
 
     # --- הוספת שיעור חדש ---
     st.subheader("➕ הוסף שיעור חדש")
 
-    add_cols = st.columns([2, 2, 2, 2, 1.5])
+    add_cols = st.columns(4)
     with add_cols[0]:
         student_options = {k: f"{v['emoji']} {v['name']}" for k, v in STUDENTS.items()}
         selected_student = st.selectbox("תלמיד", options=list(student_options.keys()),
                                         format_func=lambda x: student_options[x], key="lesson_student")
     with add_cols[1]:
         lesson_date = st.date_input("תאריך", value=datetime.now().date(), key="lesson_date",
-                                     min_value=datetime(2026, 1, 1).date())
+                                     min_value=datetime(2000, 1, 1).date())
     with add_cols[2]:
         _default_mode_index = 1 if selected_student == "other" else 0
         input_mode = st.radio("שיטת חישוב", ["⏱️ שעות × מחיר", "💵 סכום קבוע"],
                                horizontal=True, key="lesson_mode", index=_default_mode_index)
+    with add_cols[3]:
+        _custom_student_name = st.text_input(
+            "שם תלמיד (עבור 'אחר')",
+            key="lesson_custom_student",
+            disabled=selected_student != "other",
+            placeholder="אופציונלי",
+        ).strip()
     
     if input_mode == "⏱️ שעות × מחיר":
         price_cols = st.columns([2, 2, 2])
@@ -2598,35 +2716,93 @@ with tab3:
                                    horizontal=True, key="lesson_payment")
     with btn_col:
         st.markdown("<br>", unsafe_allow_html=True)
-        add_lesson = st.button("✅ הוסף שיעור", key="add_lesson_btn", use_container_width=True)
+        add_lesson = st.button(
+            "✅ הוסף שיעור",
+            key="add_lesson_btn",
+            use_container_width=True,
+            disabled=not _lessons_ready,
+        )
 
     if add_lesson and total_amount > 0:
         new_lesson = {
+            "id": uuid.uuid4().hex,
             "student": selected_student,
+            "student_name": _custom_student_name if selected_student == "other" else "",
             "date": lesson_date.strftime("%Y-%m-%d"),
             "duration": round(duration_hours, 2),
             "price_per_hour": round(price_per_hour, 2),
             "total": round(total_amount, 2),
             "payment": payment_method,
             "mode": "hours" if input_mode == "⏱️ שעות × מחיר" else "fixed",
+            "created_at": datetime.now().isoformat(timespec="seconds"),
         }
-        lessons_data["lessons"].append(new_lesson)
-        db.save_lessons_data(lessons_data)
-        st.success(f"✅ נוסף שיעור ל-{STUDENTS[selected_student]['name']} — ₪{total_amount:,.0f}")
-        st.rerun()
+        _updated_lessons_data = dict(lessons_data)
+        _updated_lessons_data["lessons"] = list(_stored_lessons) + [new_lesson]
+        if db.save_lessons_data(_updated_lessons_data):
+            _student_success_name = _custom_student_name or STUDENTS[selected_student]["name"]
+            st.success(f"✅ נוסף שיעור ל-{_student_success_name} — ₪{total_amount:,.0f}")
+            st.rerun()
+        else:
+            st.error("השיעור לא נשמר. הנתונים הקיימים לא שונו; בדוק את חיבור Supabase ונסה שוב.")
     elif add_lesson and total_amount <= 0:
         st.warning("⚠️ הסכום חייב להיות גדול מ-0")
 
     st.divider()
 
     # --- סיכום כללי KPIs ---
-    all_lessons = lessons_data.get("lessons", [])
+    all_lessons = _active_lessons
+
+    if _archived_lessons:
+        with st.expander(f"🗄️ ארכיון ושחזור ({len(_archived_lessons)})", expanded=False):
+            st.caption("שיעורים בארכיון נשמרים במלואם ואינם נכללים בדוחות עד לשחזור.")
+            _restore_options = [
+                f"{l['date']} | {_lesson_student_display(l)} | ₪{l['total']:,.0f}"
+                for l in _archived_lessons
+            ]
+            _restore_selected = st.selectbox(
+                "בחר שיעור לשחזור",
+                range(len(_restore_options)),
+                format_func=lambda i: _restore_options[i],
+                key="restore_lesson_select",
+            )
+            if st.button(
+                "↩️ שחזר שיעור",
+                key="restore_lesson_btn",
+                disabled=not _lessons_ready,
+            ):
+                _restore_view = _archived_lessons[_restore_selected]
+                _restore_source_idx = _restore_view["_source_index"]
+                _restore_record = dict(_stored_lessons[_restore_source_idx])
+                _restored_at = datetime.now().isoformat(timespec="seconds")
+                _existing_archive_history = _restore_record.get("archive_history", [])
+                _archive_history = list(_existing_archive_history) if isinstance(_existing_archive_history, list) else []
+                _archive_history.append({
+                    "archived_at": _restore_record.get("archived_at"),
+                    "restored_at": _restored_at,
+                })
+                _restore_record["archive_history"] = _archive_history
+                _restore_record["restored_at"] = _restored_at
+                _restore_record.pop("archived_at", None)
+                _restore_record.pop("archive_reason", None)
+                _restore_records = list(_stored_lessons)
+                _restore_records[_restore_source_idx] = _restore_record
+                _restore_state = dict(lessons_data)
+                _restore_state["lessons"] = _restore_records
+                if db.save_lessons_data(_restore_state):
+                    st.success("✅ השיעור שוחזר וכל המידע ההיסטורי נשמר.")
+                    st.rerun()
+                else:
+                    st.error("השחזור לא נשמר. הנתונים הקיימים לא שונו.")
 
     if all_lessons:
+        st.subheader("📊 תמונת מצב")
         total_income = sum(l["total"] for l in all_lessons)
         total_hours = sum(l.get("duration", 0) for l in all_lessons)
         total_count = len(all_lessons)
-        avg_per_hour = total_income / total_hours if total_hours > 0 else 0
+        _timed_lessons = [l for l in all_lessons if l.get("duration", 0) > 0]
+        _timed_income = sum(l["total"] for l in _timed_lessons)
+        _timed_hours = sum(l["duration"] for l in _timed_lessons)
+        avg_per_hour = _timed_income / _timed_hours if _timed_hours > 0 else 0
 
         # סיכום לפי חודש נוכחי
         current_month = datetime.now().strftime("%Y-%m")
@@ -2644,18 +2820,20 @@ with tab3:
         prev_month_lessons = [l for l in all_lessons if l["date"].startswith(_prev_month)]
         prev_month_income = sum(l["total"] for l in prev_month_lessons)
 
-        # תחזית שנתית — ממוצע חודשי × 12
-        _months_set = set(l["date"][:7] for l in all_lessons)
-        _num_months = max(len(_months_set), 1)
-        monthly_avg = total_income / _num_months
+        # תחזית שנתית — קצב השנה הנוכחית, כולל חודשים ללא שיעורים.
+        _year_lessons = [l for l in all_lessons if l["date"].startswith(str(_now.year))]
+        _year_income = sum(l["total"] for l in _year_lessons)
+        _year_hours = sum(l.get("duration", 0) for l in _year_lessons)
+        _num_months = max(_now.month, 1)
+        monthly_avg = _year_income / _num_months
         yearly_projection = monthly_avg * 12
 
         # --- שורה ראשונה: KPIs ראשיים ---
         kpi_cols = st.columns(5)
-        kpi_cols[0].metric("💰 סה״כ הכנסות", f"₪{total_income:,.0f}")
-        kpi_cols[1].metric("📅 שיעורים", f"{total_count}")
-        kpi_cols[2].metric("⏱️ סה״כ שעות", f"{total_hours:,.1f}")
-        kpi_cols[3].metric("� ממוצע לשעה", f"₪{avg_per_hour:,.0f}")
+        kpi_cols[0].metric("💰 הכנסות — כל התקופה", f"₪{total_income:,.0f}")
+        kpi_cols[1].metric("📅 שיעורים פעילים", f"{total_count}")
+        kpi_cols[2].metric("⏱️ שעות — כל התקופה", f"{total_hours:,.1f}")
+        kpi_cols[3].metric("💵 ממוצע לשעה", f"₪{avg_per_hour:,.0f}")
 
         # החודש + טרנד מול חודש קודם
         if prev_month_income > 0:
@@ -2673,8 +2851,8 @@ with tab3:
 
         # --- שורה שנייה: תובנות נוספות ---
         kpi2_cols = st.columns(4)
-        kpi2_cols[0].metric("📈 תחזית שנתית", f"₪{yearly_projection:,.0f}")
-        kpi2_cols[1].metric("📊 ממוצע חודשי", f"₪{monthly_avg:,.0f}")
+        kpi2_cols[0].metric(f"💰 הכנסות {_now.year}", f"₪{_year_income:,.0f}")
+        kpi2_cols[1].metric(f"📈 תחזית {_now.year}", f"₪{yearly_projection:,.0f}")
         kpi2_cols[2].metric("🕐 שעות החודש", f"{month_hours:,.1f}")
 
         # חלוקה לפי אמצעי תשלום
@@ -2686,6 +2864,10 @@ with tab3:
         _pay_str = " | ".join(f"{_pay_labels.get(k, k)}: ₪{v:,.0f}" for k, v in sorted(_pay_totals.items(), key=lambda x: -x[1]))
         kpi2_cols[3].metric("💳 לפי תשלום", "")
         kpi2_cols[3].caption(_pay_str)
+        st.caption(
+            f"התחזית מבוססת על ממוצע של ₪{monthly_avg:,.0f} לחודש מתחילת {_now.year}; "
+            "שיעורים בארכיון ורשומות לא תקינות אינם נכללים."
+        )
 
         st.divider()
 
@@ -2700,14 +2882,18 @@ with tab3:
             s_total = sum(l["total"] for l in student_lessons)
             s_hours = sum(l.get("duration", 0) for l in student_lessons)
             s_count = len(student_lessons)
+            _student_timed_lessons = [l for l in student_lessons if l.get("duration", 0) > 0]
+            _s_timed_income = sum(l["total"] for l in _student_timed_lessons)
+            _s_timed_hours = sum(l["duration"] for l in _student_timed_lessons)
+            _s_avg_rate = _s_timed_income / _s_timed_hours if _s_timed_hours > 0 else 0
             
             with st.expander(
                 f"{student_info['emoji']} **{student_info['name']}** — "
                 f"₪{s_total:,.0f} | {s_count} שיעורים | {s_hours:,.1f} שעות"
-                f" | ₪{s_total / s_hours:,.0f}/שעה" if s_hours > 0 else
+                f" | ₪{_s_avg_rate:,.0f}/שעה" if _s_avg_rate > 0 else
                 f"{student_info['emoji']} **{student_info['name']}** — "
                 f"₪{s_total:,.0f} | {s_count} שיעורים",
-                expanded=True
+                expanded=False
             ):
                 # טבלת שיעורים
                 rows = []
@@ -2716,6 +2902,7 @@ with tab3:
                     _pay_display = {"bit": "📱 ביט", "paybox": "📲 פייבוקס", "מזומן": "💵 מזומן"}.get(_pay, _pay)
                     row = {
                         '#': len(student_lessons) - i,
+                        'תלמיד': _lesson_student_display(l),
                         'תאריך': l['date'],
                         'משך': f"{l['duration']:.1f}h" if l.get('duration', 0) > 0 else "—",
                         'מחיר/שעה': f"₪{l['price_per_hour']:,.0f}" if l.get('price_per_hour', 0) > 0 else "—",
@@ -2734,7 +2921,7 @@ with tab3:
                     _sm_cols[0].metric("💰 הכנסה כוללת", f"₪{s_total:,.0f}")
                     _sm_cols[1].metric("📅 שיעורים", f"{s_count}")
                     _sm_cols[2].metric("⏱️ שעות", f"{s_hours:.1f}" if s_hours > 0 else "—")
-                    st.caption("ℹ️ שיעורים קצרי-טווח — לא נשמרים בשם.")
+                    st.caption("ℹ️ שיעורים שסומנו כ'אחר'. שמות שהוזנו נשמרים ומופיעים בטבלה.")
                     continue
                 _s_default_rate = float(student_info.get("default_rate", 0))
                 _s_monthly_inc = {}
@@ -2746,7 +2933,7 @@ with tab3:
                 _s_proj_annual = _s_monthly_avg * 12
                 _last_lesson_date = max(_sl["date"] for _sl in student_lessons)
                 _last_dt = datetime.strptime(_last_lesson_date, "%Y-%m-%d")
-                _days_since = (datetime.now() - _last_dt).days
+                _days_since = max((datetime.now() - _last_dt).days, 0)
 
                 if s_count > 1:
                     _dates_sorted = sorted(datetime.strptime(_sl["date"], "%Y-%m-%d") for _sl in student_lessons)
@@ -2828,15 +3015,14 @@ with tab3:
         st.divider()
 
         # --- יעד הכנסה שנתית + טיפים כלכליים ---
-        st.subheader("🎯 יעד הכנסה שנתית — ₪30,000")
-
         _GOAL_ANNUAL = 30000
+        _goal_now = datetime.now()
+        st.subheader(f"🎯 יעד הכנסה לשנת {_goal_now.year} — ₪{_GOAL_ANNUAL:,.0f}")
 
         # --- חישובים ---
         # חודשים שנותרו בשנה הנוכחית
-        _goal_now = datetime.now()
         _months_left = 12 - _goal_now.month + 1  # כולל החודש הנוכחי
-        _income_this_year = sum(l["total"] for l in all_lessons if l["date"].startswith(str(_goal_now.year)))
+        _income_this_year = _year_income
         _remaining = max(_GOAL_ANNUAL - _income_this_year, 0)
         _goal_pct = min(_income_this_year / _GOAL_ANNUAL * 100, 100)
 
@@ -2844,8 +3030,16 @@ with tab3:
         _needed_per_month = _remaining / max(_months_left, 1)
 
         # שיעורים נדרשים — לפי ממוצע הכנסה לשיעור
-        _avg_per_lesson = total_income / total_count if total_count > 0 else 100
-        _avg_duration = total_hours / total_count if total_count > 0 else 1.0
+        _goal_lessons = _year_lessons if _year_lessons else all_lessons
+        _avg_per_lesson = (
+            sum(l["total"] for l in _goal_lessons) / len(_goal_lessons)
+            if _goal_lessons else 0
+        )
+        _goal_timed_lessons = [l for l in _goal_lessons if l.get("duration", 0) > 0]
+        _avg_duration = (
+            sum(l["duration"] for l in _goal_timed_lessons) / len(_goal_timed_lessons)
+            if _goal_timed_lessons else 1.0
+        )
         _lessons_per_month_needed = _needed_per_month / _avg_per_lesson if _avg_per_lesson > 0 else 0
         _hours_per_month_needed = _lessons_per_month_needed * _avg_duration
 
@@ -2853,11 +3047,15 @@ with tab3:
         _lessons_per_week_needed = _lessons_per_month_needed / 4.33
 
         # קצב נוכחי (שיעורים בחודש)
-        _current_lessons_per_month = total_count / _num_months
-        _current_hours_per_month = total_hours / _num_months
+        _current_lessons_per_month = len(_year_lessons) / _num_months
+        _current_hours_per_month = _year_hours / _num_months
 
         # כמה צריך להגדיל
-        _growth_needed = ((_lessons_per_month_needed - _current_lessons_per_month) / _current_lessons_per_month * 100) if _current_lessons_per_month > 0 else 0
+        _growth_needed = (
+            (_lessons_per_month_needed - _current_lessons_per_month)
+            / _current_lessons_per_month * 100
+            if _current_lessons_per_month > 0 else None
+        )
 
         # --- Progress bar ---
         st.markdown(f"**התקדמות {_goal_now.year}:** ₪{_income_this_year:,.0f} מתוך ₪{_GOAL_ANNUAL:,.0f}")
@@ -2881,13 +3079,17 @@ with tab3:
         # --- סטטוס היעד ---
         if _remaining <= 0:
             st.success(f"🏆 מזל טוב! הגעת ליעד ה-₪{_GOAL_ANNUAL:,.0f} השנה! סה״כ: ₪{_income_this_year:,.0f}")
-        elif _growth_needed <= 0:
+        elif _avg_per_lesson <= 0:
+            st.warning("אין עדיין מספיק נתוני הכנסה לחישוב מספר השיעורים הנדרש ליעד.")
+        elif _current_lessons_per_month <= 0:
+            st.warning("עדיין לא נרשמו שיעורים השנה, ולכן אין מספיק נתונים לחישוב קצב התקדמות.")
+        elif _growth_needed is not None and _growth_needed <= 0:
             st.success(f"✅ הקצב הנוכחי שלך ({_current_lessons_per_month:.1f} שיעורים/חודש) **מספיק** כדי להגיע ליעד! המשך ככה.")
-        elif _growth_needed <= 20:
+        elif _growth_needed is not None and _growth_needed <= 20:
             st.info(f"👍 כמעט שם! צריך להגדיל ב-**{_growth_needed:.0f}%** — עוד {_lessons_per_month_needed - _current_lessons_per_month:.1f} שיעורים לחודש.")
-        elif _growth_needed <= 50:
+        elif _growth_needed is not None and _growth_needed <= 50:
             st.warning(f"⚠️ צריך להגדיל את הקצב ב-**{_growth_needed:.0f}%** — מ-{_current_lessons_per_month:.1f} ל-{_lessons_per_month_needed:.1f} שיעורים/חודש.")
-        else:
+        elif _growth_needed is not None:
             st.error(f"🔴 פער גדול: צריך להגדיל ב-**{_growth_needed:.0f}%** — מ-{_current_lessons_per_month:.1f} ל-{_lessons_per_month_needed:.1f} שיעורים/חודש.")
 
         st.divider()
@@ -2900,7 +3102,7 @@ with tab3:
         # 1) ניתוח תעריף
         if avg_per_hour > 0:
             if avg_per_hour < 80:
-                tips.append(("warning", f"💰 **תעריף נמוך (₪{avg_per_hour:.0f}/שעה):** שקול להעלות מחירים. שיעורים פרטיים איכותיים בשוק נעים בין ₪100-150/שעה. העלאה של ₪20/שעה תוסיף ₪{20 * _current_hours_per_month * 12:,.0f} בשנה."))
+                tips.append(("warning", f"💰 **תעריף ממוצע נמוך ביחס לתעריפים שהוגדרו באפליקציה (₪{avg_per_hour:.0f}/שעה).** בדוק אם שיעורים מסוימים נרשמו בסכום או במשך שגויים."))
             elif avg_per_hour < 120:
                 tips.append(("info", f"📊 **תעריף סביר (₪{avg_per_hour:.0f}/שעה).** אם התלמידים מרוצים ויש ביקוש — זה הזמן לשקול העלאה הדרגתית לתלמידים חדשים."))
             else:
@@ -2911,10 +3113,16 @@ with tab3:
         for sk, si in STUDENTS.items():
             sl = [l for l in all_lessons if l["student"] == sk]
             if sl:
-                s_inc = sum(l["total"] for l in sl)
-                s_hrs = sum(l.get("duration", 0) for l in sl)
-                s_rate = s_inc / s_hrs if s_hrs > 0 else 0
-                student_stats[si["name"]] = {"income": s_inc, "hours": s_hrs, "rate": s_rate, "count": len(sl)}
+                _sl_timed = [l for l in sl if l.get("duration", 0) > 0]
+                s_inc = sum(l["total"] for l in _sl_timed)
+                s_hrs = sum(l["duration"] for l in _sl_timed)
+                if s_hrs > 0:
+                    student_stats[si["name"]] = {
+                        "income": s_inc,
+                        "hours": s_hrs,
+                        "rate": s_inc / s_hrs,
+                        "count": len(_sl_timed),
+                    }
 
         if len(student_stats) >= 2:
             best_student = max(student_stats.items(), key=lambda x: x[1]["rate"])
@@ -2932,8 +3140,9 @@ with tab3:
         
         if len(_monthly_incomes) >= 2:
             _month_values = list(_monthly_incomes.values())
-            _month_std = (sum((x - monthly_avg) ** 2 for x in _month_values) / len(_month_values)) ** 0.5
-            _cv = _month_std / monthly_avg * 100 if monthly_avg > 0 else 0
+            _active_month_avg = sum(_month_values) / len(_month_values)
+            _month_std = (sum((x - _active_month_avg) ** 2 for x in _month_values) / len(_month_values)) ** 0.5
+            _cv = _month_std / _active_month_avg * 100 if _active_month_avg > 0 else 0
             if _cv > 50:
                 tips.append(("warning", f"📉 **הכנסה לא יציבה:** הפער בין החודשים גדול ({_cv:.0f}% CV). נסה לקבוע שיעורים קבועים שבועיים כדי לייצב."))
             elif _cv > 25:
@@ -2962,10 +3171,17 @@ with tab3:
         # 7) יעד 30K — ספציפי
         if yearly_projection < _GOAL_ANNUAL:
             _gap_annual = _GOAL_ANNUAL - yearly_projection
-            _need_extra_hours = _gap_annual / avg_per_hour / 12 if avg_per_hour > 0 else 0
-            tips.append(("warning", f"🎯 **ליעד ₪{_GOAL_ANNUAL:,.0f}:** חסרים ₪{_gap_annual:,.0f}/שנה (₪{_gap_annual/12:,.0f}/חודש). "
-                         f"הדרך: עוד **{_need_extra_hours:.1f} שעות/חודש**, "
-                         f"או **העלאת תעריף ל-₪{_GOAL_ANNUAL / (_current_hours_per_month * 12):,.0f}/שעה** (ללא שינוי בכמות)."))
+            _need_extra_hours = _gap_annual / avg_per_hour / 12 if avg_per_hour > 0 else None
+            _target_rate_text = (
+                f", או תעריף ממוצע של ₪{_GOAL_ANNUAL / (_current_hours_per_month * 12):,.0f}/שעה ללא שינוי בכמות"
+                if _current_hours_per_month > 0 else ""
+            )
+            if _need_extra_hours is not None:
+                tips.append(("warning", f"🎯 **ליעד ₪{_GOAL_ANNUAL:,.0f}:** חסרים ₪{_gap_annual:,.0f}/שנה (₪{_gap_annual/12:,.0f}/חודש). "
+                             f"נדרשות עוד **{_need_extra_hours:.1f} שעות/חודש** בקצב התעריף הנוכחי{_target_rate_text}."))
+            else:
+                tips.append(("warning", f"🎯 **ליעד ₪{_GOAL_ANNUAL:,.0f}:** חסרים ₪{_gap_annual:,.0f}/שנה. "
+                             "הוסף משך לשיעורים כדי לחשב את מספר השעות הנדרש."))
         else:
             tips.append(("success", f"🎯 **התחזית השנתית (₪{yearly_projection:,.0f}) עומדת ביעד ₪{_GOAL_ANNUAL:,.0f}!** אפשר לשאוף ל-₪40,000 😎"))
 
@@ -2983,10 +3199,9 @@ with tab3:
         st.divider()
 
         # --- תחזית עתידית חודש-חודש ---
-        st.subheader("🔮 תחזית עתידית — 2026")
-
         _fc_now = datetime.now()
         _fc_year = _fc_now.year
+        st.subheader(f"🔮 תחזית חודשית — {_fc_year}")
         _all_year_months = [f"{_fc_year}-{m:02d}" for m in range(1, 13)]
 
         # הכנסות בפועל לפי חודש בשנה הנוכחית
@@ -3012,9 +3227,9 @@ with tab3:
             _fc_total = _fc_actual_sum + _fc_projected_sum
 
             _fc_kpi = st.columns(4)
-            _fc_kpi[0].metric("✅ בפועל 2026", f"₪{_fc_actual_sum:,.0f}")
+            _fc_kpi[0].metric(f"✅ בפועל {_fc_year}", f"₪{_fc_actual_sum:,.0f}")
             _fc_kpi[1].metric("🔮 תחזית יתרת השנה", f"₪{_fc_projected_sum:,.0f}")
-            _fc_kpi[2].metric("📊 סה״כ צפוי 2026", f"₪{_fc_total:,.0f}")
+            _fc_kpi[2].metric(f"📊 סה״כ צפוי {_fc_year}", f"₪{_fc_total:,.0f}")
             _fc_goal_delta = _fc_total - _GOAL_ANNUAL
             _fc_kpi[3].metric(
                 f"🎯 מול יעד ₪{_GOAL_ANNUAL:,}",
@@ -3045,93 +3260,168 @@ with tab3:
                 _fc_gap = _GOAL_ANNUAL - _fc_total
                 _fc_months_left = max(12 - _fc_now.month, 1)
                 _fc_extra_hours = _fc_gap / avg_per_hour / _fc_months_left if avg_per_hour > 0 else 0
-                st.warning(
-                    f"📊 **תחזית {_fc_year}: ₪{_fc_total:,.0f}** — חסרים ₪{_fc_gap:,.0f} ליעד. "
-                    f"כדי לסגור את הפער: עוד **{_fc_extra_hours:.1f} שעות/חודש** עד סוף השנה, "
-                    f"או העלאת תעריף ב-₪{_fc_gap / (total_hours if total_hours > 0 else 1):.0f}/שעה על כל השיעורים הנותרים."
-                )
+                if avg_per_hour > 0:
+                    st.warning(
+                        f"📊 **תחזית {_fc_year}: ₪{_fc_total:,.0f}** — חסרים ₪{_fc_gap:,.0f} ליעד. "
+                        f"בקצב התעריף הנוכחי נדרשות עוד **{_fc_extra_hours:.1f} שעות/חודש** עד סוף השנה."
+                    )
+                else:
+                    st.warning(
+                        f"📊 **תחזית {_fc_year}: ₪{_fc_total:,.0f}** — חסרים ₪{_fc_gap:,.0f} ליעד. "
+                        "יש להוסיף משך לשיעורים כדי לחשב כמה שעות נוספות נדרשות."
+                    )
 
         st.divider()
 
-        # --- עריכת שיעור ---
-        st.subheader("✏️ עריכת שיעור")
+        # --- ניהול רשומות ללא מחיקה ---
+        with st.expander("✏️ ניהול רשומות — עריכה וארכיון", expanded=False):
+            st.caption("עריכה שומרת צילום של הערכים הקודמים. ארכיון מסתיר שיעור מהדוחות אך אינו מוחק אותו.")
 
-        if all_lessons:
-            edit_options = []
-            for i, l in enumerate(all_lessons):
-                s_name = STUDENTS.get(l["student"], {}).get("name", l["student"])
-                _pay = l.get('payment', l.get('note', ''))
-                _pay_d = {"bit": "ביט", "paybox": "פייבוקס", "מזומן": "מזומן"}.get(_pay, _pay)
-                edit_options.append(
-                    f"#{i+1} | {l['date']} | {s_name} | ₪{l['total']:,.0f} | {_pay_d}"
-                )
-
-            selected_edit = st.selectbox("בחר שיעור לעריכה", edit_options, key="edit_lesson_select")
-            edit_idx = edit_options.index(selected_edit)
-            edit_lesson = all_lessons[edit_idx]
-
+            _record_options = [
+                f"#{i + 1} | {l['date']} | {_lesson_student_display(l)} | ₪{l['total']:,.0f}"
+                for i, l in enumerate(all_lessons)
+            ]
+            _selected_record_pos = st.selectbox(
+                "בחר שיעור",
+                range(len(_record_options)),
+                format_func=lambda i: _record_options[i],
+                key="manage_lesson_select",
+            )
+            _edit_lesson = all_lessons[_selected_record_pos]
+            _edit_source_idx = _edit_lesson["_source_index"]
+            _edit_widget_key = _edit_lesson.get("id") or f"legacy_{_edit_source_idx}"
+            _student_keys = list(STUDENTS.keys())
+            _student_idx = _student_keys.index(_edit_lesson["student"]) if _edit_lesson["student"] in _student_keys else 0
             _pay_options = ["bit", "paybox", "מזומן"]
-            _current_pay = edit_lesson.get('payment', edit_lesson.get('note', 'bit'))
+            _current_pay = _edit_lesson.get("payment", "bit")
+            if _current_pay not in _pay_options:
+                _pay_options.append(_current_pay)
             _pay_idx = _pay_options.index(_current_pay) if _current_pay in _pay_options else 0
 
-            ec1, ec2, ec3, ec4 = st.columns(4)
-            with ec1:
-                new_duration = st.number_input("משך (שעות)", min_value=0.0, max_value=10.0,
-                                                value=float(edit_lesson.get('duration', 0)),
-                                                step=0.25, key="edit_dur")
-            with ec2:
-                new_pph = st.number_input("מחיר לשעה (₪)", min_value=0.0,
-                                           value=float(edit_lesson.get('price_per_hour', 0)),
-                                           step=10.0, key="edit_pph")
-            with ec3:
-                _auto_total = round(new_duration * new_pph, 2) if (new_duration > 0 and new_pph > 0) else float(edit_lesson.get('total', 0))
-                new_total = st.number_input("סכום סופי (₪)", min_value=0.0,
-                                             value=_auto_total,
-                                             step=10.0, key="edit_total")
-            with ec4:
-                new_payment = st.radio("תשלום", _pay_options,
-                                        format_func=lambda x: {"bit": "📱 ביט", "paybox": "📲 פייבוקס", "מזומן": "💵 מזומן"}[x],
-                                        index=_pay_idx, horizontal=True, key="edit_payment")
-
-            if st.button("💾 שמור שינויים", key="save_edit_btn"):
-                lessons_data["lessons"][edit_idx]["duration"] = round(new_duration, 2)
-                lessons_data["lessons"][edit_idx]["price_per_hour"] = round(new_pph, 2)
-                lessons_data["lessons"][edit_idx]["total"] = round(new_total, 2)
-                lessons_data["lessons"][edit_idx]["payment"] = new_payment
-                if new_duration > 0 and new_total > 0:
-                    lessons_data["lessons"][edit_idx]["price_per_hour"] = round(new_total / new_duration, 2)
-                db.save_lessons_data(lessons_data)
-                st.success("✅ השיעור עודכן בהצלחה!")
-                st.rerun()
-
-        st.divider()
-
-        # --- מחיקת שיעור ---
-        st.subheader("🗑️ מחיקת שיעור")
-        st.caption("בחר שיעור למחיקה (במקרה של טעות)")
-
-        if all_lessons:
-            delete_options = []
-            for i, l in enumerate(all_lessons):
-                s_name = STUDENTS.get(l["student"], {}).get("name", l["student"])
-                _pay = l.get('payment', l.get('note', ''))
-                _pay_d = {"bit": "ביט", "paybox": "פייבוקס", "מזומן": "מזומן"}.get(_pay, _pay)
-                delete_options.append(
-                    f"#{i+1} | {l['date']} | {s_name} | ₪{l['total']:,.0f} | {_pay_d}"
+            _edit_row1 = st.columns(4)
+            with _edit_row1[0]:
+                _new_student = st.selectbox(
+                    "תלמיד",
+                    _student_keys,
+                    index=_student_idx,
+                    format_func=lambda k: f"{STUDENTS[k]['emoji']} {STUDENTS[k]['name']}",
+                    key=f"edit_student_{_edit_widget_key}",
                 )
-            
-            del_col1, del_col2 = st.columns([4, 1])
-            with del_col1:
-                selected_delete = st.selectbox("בחר שיעור", delete_options, key="delete_lesson_select")
-            with del_col2:
-                st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("🗑️ מחק", key="delete_lesson_btn", use_container_width=True):
-                    idx = delete_options.index(selected_delete)
-                    deleted = lessons_data["lessons"].pop(idx)
-                    db.save_lessons_data(lessons_data)
-                    s_name = STUDENTS.get(deleted["student"], {}).get("name", deleted["student"])
-                    st.success(f"🗑️ נמחק: {s_name} — {deleted['date']} — ₪{deleted['total']:,.0f}")
+            with _edit_row1[1]:
+                _new_student_name = st.text_input(
+                    "שם תלמיד (עבור 'אחר')",
+                    value=_edit_lesson.get("student_name", ""),
+                    disabled=_new_student != "other",
+                    key=f"edit_student_name_{_edit_widget_key}",
+                ).strip()
+            with _edit_row1[2]:
+                _new_date = st.date_input(
+                    "תאריך",
+                    value=datetime.strptime(_edit_lesson["date"], "%Y-%m-%d").date(),
+                    min_value=datetime(2000, 1, 1).date(),
+                    key=f"edit_lesson_date_{_edit_widget_key}",
+                )
+            with _edit_row1[3]:
+                _new_payment = st.selectbox(
+                    "אופן תשלום",
+                    _pay_options,
+                    index=_pay_idx,
+                    format_func=lambda x: {"bit": "📱 ביט", "paybox": "📲 פייבוקס", "מזומן": "💵 מזומן"}.get(x, str(x or "לא ידוע")),
+                    key=f"edit_payment_{_edit_widget_key}",
+                )
+
+            _edit_row2 = st.columns(2)
+            with _edit_row2[0]:
+                _new_duration = st.number_input(
+                    "משך (שעות)",
+                    min_value=0.0,
+                    max_value=10.0,
+                    value=float(_edit_lesson.get("duration", 0)),
+                    step=0.25,
+                    key=f"edit_dur_{_edit_widget_key}",
+                )
+            with _edit_row2[1]:
+                _new_total = st.number_input(
+                    "סכום סופי (₪)",
+                    min_value=0.0,
+                    value=float(_edit_lesson.get("total", 0)),
+                    step=10.0,
+                    key=f"edit_total_{_edit_widget_key}",
+                )
+            if _new_duration > 0:
+                st.caption(f"מחיר אפקטיבי לאחר השמירה: ₪{_new_total / _new_duration:,.2f} לשעה")
+
+            if st.button(
+                "💾 שמור עריכה",
+                key=f"save_edit_btn_{_edit_widget_key}",
+                disabled=not _lessons_ready,
+            ):
+                if _new_total <= 0:
+                    st.warning("הסכום חייב להיות גדול מ-0.")
+                else:
+                    _original_record = dict(_stored_lessons[_edit_source_idx])
+                    _edited_record = dict(_original_record)
+                    _existing_edit_history = _edited_record.get("edit_history", [])
+                    _edit_history = list(_existing_edit_history) if isinstance(_existing_edit_history, list) else []
+                    _edit_history.append({
+                        "edited_at": datetime.now().isoformat(timespec="seconds"),
+                        "previous": {
+                            key: _original_record.get(key)
+                            for key in ("student", "student_name", "date", "duration", "price_per_hour", "total", "payment")
+                        },
+                    })
+                    _edited_record.update({
+                        "id": _edited_record.get("id") or uuid.uuid4().hex,
+                        "student": _new_student,
+                        "student_name": _new_student_name if _new_student == "other" else "",
+                        "date": _new_date.strftime("%Y-%m-%d"),
+                        "duration": round(float(_new_duration), 2),
+                        "price_per_hour": round(
+                            float(_new_total) / float(_new_duration)
+                            if _new_duration > 0 else float(_edit_lesson.get("price_per_hour", 0)),
+                            2,
+                        ),
+                        "total": round(float(_new_total), 2),
+                        "payment": _new_payment,
+                        "edit_history": _edit_history,
+                        "updated_at": datetime.now().isoformat(timespec="seconds"),
+                    })
+                    _edited_records = list(_stored_lessons)
+                    _edited_records[_edit_source_idx] = _edited_record
+                    _edited_state = dict(lessons_data)
+                    _edited_state["lessons"] = _edited_records
+                    if db.save_lessons_data(_edited_state):
+                        st.success("✅ השיעור עודכן; הערכים הקודמים נשמרו בהיסטוריית העריכה.")
+                        st.rerun()
+                    else:
+                        st.error("העריכה לא נשמרה. הנתונים הקיימים לא שונו.")
+
+            st.markdown("---")
+            _confirm_archive = st.checkbox(
+                "אני מאשר להעביר את השיעור הנבחר לארכיון",
+                key=f"confirm_archive_lesson_{_edit_widget_key}",
+            )
+            if st.button(
+                "🗄️ העבר לארכיון",
+                key=f"archive_lesson_btn_{_edit_widget_key}",
+                disabled=not (_lessons_ready and _confirm_archive),
+            ):
+                _archive_record = dict(_stored_lessons[_edit_source_idx])
+                _archive_record["id"] = _archive_record.get("id") or uuid.uuid4().hex
+                _archive_record["archived_at"] = datetime.now().isoformat(timespec="seconds")
+                _archive_record["archive_reason"] = "user_requested"
+                _archived_records_state = list(_stored_lessons)
+                _archived_records_state[_edit_source_idx] = _archive_record
+                _archive_state = dict(lessons_data)
+                _archive_state["lessons"] = _archived_records_state
+                if db.save_lessons_data(_archive_state):
+                    st.success("✅ השיעור הועבר לארכיון ולא נמחק. ניתן לשחזר אותו בכל עת.")
                     st.rerun()
+                else:
+                    st.error("ההעברה לארכיון לא נשמרה. הנתונים הקיימים לא שונו.")
 
     else:
-        st.info("🎒 אין שיעורים עדיין. התחל להוסיף שיעורים למעלה!")
+        if _archived_lessons:
+            st.info("אין כרגע שיעורים פעילים. ניתן לשחזר שיעורים דרך אזור הארכיון למעלה.")
+        else:
+            st.info("🎒 אין שיעורים עדיין. התחל להוסיף שיעורים למעלה!")
