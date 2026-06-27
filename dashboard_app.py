@@ -8,6 +8,7 @@ import os
 import json
 import math
 import uuid
+import copy
 import requests
 from datetime import datetime, timedelta
 from supabase import create_client, Client
@@ -148,6 +149,7 @@ class LocalJSONDatabase:
         self._il_prices_file = os.path.join(_dir, "il_prices_saved.json")
         self._baseline_file = os.path.join(_dir, "portfolio_baseline.json")
         self._purchased_stocks_file = os.path.join(_dir, "purchased_stocks.json")
+        self._dividend_snapshot_file = os.path.join(_dir, "dividend_snapshot.json")
 
     def _load(self, path, default=None):
         try:
@@ -171,7 +173,7 @@ class LocalJSONDatabase:
         return self._load(self._stop_orders_file, default)
 
     def save_stop_orders(self, data):
-        self._save(self._stop_orders_file, data)
+        return self._save(self._stop_orders_file, data)
 
     def stop_orders_file_exists(self):
         return os.path.exists(self._stop_orders_file)
@@ -181,14 +183,14 @@ class LocalJSONDatabase:
         return self._load(self._executed_stops_file, [])
 
     def save_executed_stops(self, data):
-        self._save(self._executed_stops_file, data)
+        return self._save(self._executed_stops_file, data)
 
     # --- Sold Stocks ---
     def get_sold_stocks(self):
         return self._load(self._sold_stocks_file, [])
 
     def save_sold_stocks(self, data):
-        self._save(self._sold_stocks_file, data)
+        return self._save(self._sold_stocks_file, data)
 
     # --- Lessons ---
     def get_lessons_data(self, default=None):
@@ -204,21 +206,21 @@ class LocalJSONDatabase:
         return self._load(self._extra_cash_file, {"total_deposited_ils": 0.0, "deposits": []})
 
     def save_extra_cash(self, data):
-        self._save(self._extra_cash_file, data)
+        return self._save(self._extra_cash_file, data)
 
     # --- IL Prices ---
     def get_il_prices(self):
         return self._load(self._il_prices_file, {})
 
     def save_il_prices(self, data):
-        self._save(self._il_prices_file, data)
+        return self._save(self._il_prices_file, data)
 
     # --- Baseline ---
     def get_baseline(self):
         return self._load(self._baseline_file, None)
 
     def save_baseline(self, data):
-        self._save(self._baseline_file, data)
+        return self._save(self._baseline_file, data)
 
     def baseline_exists(self):
         return os.path.exists(self._baseline_file)
@@ -228,7 +230,14 @@ class LocalJSONDatabase:
         return self._load(self._purchased_stocks_file, [])
 
     def save_purchased_stocks(self, data):
-        self._save(self._purchased_stocks_file, data)
+        return self._save(self._purchased_stocks_file, data)
+
+    # --- Dividend Snapshot ---
+    def get_dividend_snapshot(self):
+        return self._load(self._dividend_snapshot_file, {})
+
+    def save_dividend_snapshot(self, data):
+        return self._save(self._dividend_snapshot_file, data)
 
     # --- Received Dividends ---
     def get_received_dividends(self):
@@ -237,7 +246,7 @@ class LocalJSONDatabase:
 
     def save_received_dividends(self, data):
         _dir = os.path.dirname(os.path.abspath(__file__))
-        self._save(os.path.join(_dir, "received_dividends.json"), data)
+        return self._save(os.path.join(_dir, "received_dividends.json"), data)
 
 
 class SupabaseDatabase:
@@ -279,7 +288,7 @@ class SupabaseDatabase:
         return self._get("stop_orders", default)
 
     def save_stop_orders(self, data):
-        self._set("stop_orders", data)
+        return self._set("stop_orders", data)
 
     def stop_orders_file_exists(self):
         return self._exists("stop_orders")
@@ -289,14 +298,14 @@ class SupabaseDatabase:
         return self._get("executed_stops", [])
 
     def save_executed_stops(self, data):
-        self._set("executed_stops", data)
+        return self._set("executed_stops", data)
 
     # --- Sold Stocks ---
     def get_sold_stocks(self):
         return self._get("sold_stocks", [])
 
     def save_sold_stocks(self, data):
-        self._set("sold_stocks", data)
+        return self._set("sold_stocks", data)
 
     # --- Lessons ---
     def get_lessons_data(self, default=None):
@@ -312,21 +321,21 @@ class SupabaseDatabase:
         return self._get("extra_cash", {"total_deposited_ils": 0.0, "deposits": []})
 
     def save_extra_cash(self, data):
-        self._set("extra_cash", data)
+        return self._set("extra_cash", data)
 
     # --- IL Prices ---
     def get_il_prices(self):
         return self._get("il_prices", {})
 
     def save_il_prices(self, data):
-        self._set("il_prices", data)
+        return self._set("il_prices", data)
 
     # --- Baseline ---
     def get_baseline(self):
         return self._get("baseline", None)
 
     def save_baseline(self, data):
-        self._set("baseline", data)
+        return self._set("baseline", data)
 
     def baseline_exists(self):
         return self._exists("baseline")
@@ -336,14 +345,21 @@ class SupabaseDatabase:
         return self._get("purchased_stocks", [])
 
     def save_purchased_stocks(self, data):
-        self._set("purchased_stocks", data)
+        return self._set("purchased_stocks", data)
+
+    # --- Dividend Snapshot ---
+    def get_dividend_snapshot(self):
+        return self._get("dividend_snapshot", {})
+
+    def save_dividend_snapshot(self, data):
+        return self._set("dividend_snapshot", data)
 
     # --- Received Dividends ---
     def get_received_dividends(self):
         return self._get("received_dividends", [])
 
     def save_received_dividends(self, data):
-        self._set("received_dividends", data)
+        return self._set("received_dividends", data)
 
 
 db = SupabaseDatabase()
@@ -373,8 +389,8 @@ israeli_stocks = {
         "qty": 9682.00,
         "default_price_ils": 3.3272,
         "yf_ticker": None,
-        "funder_id": "5122957",  # קסם S&P 500 — משיכת מחיר מ-funder.co.il
-        "funder_divisor": 100,    # מחיר funder לחלק ב-100 = מחיר ליחידה
+        "fund_id": "5122957",
+        "fund_price_divisor": 100,  # המקור מציג מחיר באגורות; התיק מנוהל בשקלים ליחידה
         "type": "Core",
         "name": "S&P 500 (₪)",
         "currency": "ILS"
@@ -391,7 +407,7 @@ israeli_stocks = {
 
 
 def _normalize_cash_state(raw_state):
-    state = raw_state or {}
+    state = copy.deepcopy(raw_state) if isinstance(raw_state, dict) else {}
     state.setdefault("total_deposited_ils", 0.0)
     state.setdefault("deposits", [])
     state.setdefault("sale_cash_usd", 0.0)
@@ -401,26 +417,98 @@ def _normalize_cash_state(raw_state):
 
 
 def _is_same_sale(existing_sale, sale_entry):
-    return (
-        existing_sale.get('ticker') == sale_entry.get('ticker')
-        and float(existing_sale.get('qty', 0)) == float(sale_entry.get('qty', 0))
-        and float(existing_sale.get('sale_price', 0)) == float(sale_entry.get('sale_price', 0))
-        and existing_sale.get('date') == sale_entry.get('date')
-    )
+    try:
+        return (
+            normalize_market_ticker(existing_sale.get('ticker')) == normalize_market_ticker(sale_entry.get('ticker'))
+            and float(existing_sale.get('qty', 0)) == float(sale_entry.get('qty', 0))
+            and float(existing_sale.get('sale_price', 0)) == float(sale_entry.get('sale_price', 0))
+            and existing_sale.get('date') == sale_entry.get('date')
+        )
+    except (TypeError, ValueError, AttributeError):
+        return False
 
 
-def _record_sale(db_obj, ticker, name, qty, sale_price, currency, sale_date, stop_price=None, reason='manual'):
+def _record_timestamp(date_value, registered_at=None):
+    """Return a sortable naive timestamp while preserving same-day transaction order when known."""
+    date_text = str(date_value or '').strip()
+    registered_text = str(registered_at or '').strip()
+    candidate = registered_text if registered_text[:10] == date_text[:10] and len(registered_text) > 10 else date_text
+    try:
+        return datetime.fromisoformat(candidate.replace('Z', '+00:00')).replace(tzinfo=None)
+    except (TypeError, ValueError):
+        try:
+            return datetime.strptime(date_text[:10], '%Y-%m-%d')
+        except (TypeError, ValueError):
+            return datetime.min
+
+
+def _purchase_is_after_sale(purchase_record, latest_sale_value):
+    if not latest_sale_value:
+        return True
+    purchase_ts = _record_timestamp(purchase_record.get('date'), purchase_record.get('registered_at'))
+    sale_ts = _record_timestamp(latest_sale_value)
+    return purchase_ts > sale_ts
+
+
+def _is_valid_purchase_record(record):
+    if not isinstance(record, dict) or not record.get('ticker') or record.get('archived_at'):
+        return False
+    try:
+        return float(record.get('qty', 0)) > 0 and float(record.get('price', 0)) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _effective_purchase_price(price, qty, currency='USD', commission_usd=0.0):
+    """Per-share cost including purchase commission for USD trades."""
+    price = float(price)
+    qty = float(qty)
+    commission_usd = float(commission_usd or 0.0)
+    if price <= 0 or qty <= 0:
+        raise ValueError("מחיר וכמות רכישה חייבים להיות חיוביים")
+    if currency == 'USD':
+        return (price * qty + commission_usd) / qty
+    return price
+
+
+def _save_state_bundle(steps):
+    """Best-effort transaction for the app's separate state rows, with rollback on failure."""
+    completed = []
+    for save_fn, new_value, old_value in steps:
+        if not save_fn(new_value):
+            for rollback_fn, rollback_value in reversed(completed):
+                rollback_fn(rollback_value)
+            return False
+        completed.append((save_fn, old_value))
+    return True
+
+
+def _record_sale(
+    db_obj, ticker, name, qty, sale_price, currency, sale_date,
+    stop_price=None, reason='manual', fx_rate=None,
+):
+    ticker = normalize_market_ticker(ticker)
     qty = float(qty)
     sale_price = float(sale_price)
+    currency = str(currency or 'USD').upper()
+    if qty <= 0 or sale_price <= 0:
+        raise ValueError("כמות ומחיר מכירה חייבים להיות גדולים מאפס")
+    if currency not in {'USD', 'ILS'}:
+        raise ValueError("מטבע המכירה חייב להיות USD או ILS")
     _cb_info = cost_basis.get(ticker, {})
     _cost_per = _cb_info.get('price')
     _commission = TRADE_COMMISSION_USD
+    _fx_rate = float(fx_rate or 0.0)
+    if _fx_rate < 0:
+        raise ValueError("שער ההמרה לא יכול להיות שלילי")
+    _commission_ils = round(_commission * _fx_rate, 2) if currency == 'ILS' and _fx_rate else None
     if currency == 'USD':
         _proceeds = round((sale_price * qty) - _commission, 2)
     else:
         _proceeds = round(sale_price * qty, 2)
 
     sale_entry = {
+        'id': uuid.uuid4().hex,
         'ticker': ticker,
         'name': name,
         'qty': qty,
@@ -429,20 +517,32 @@ def _record_sale(db_obj, ticker, name, qty, sale_price, currency, sale_date, sto
         'proceeds': _proceeds,
         'cost_per_share': _cost_per,
         'commission_usd': _commission,
+        'commission_ils': _commission_ils,
+        'fx_rate_at_sale': _fx_rate or None,
         'currency': currency,
         'reason': reason,
         'date': sale_date,
+        'recorded_at': datetime.now().isoformat(timespec='seconds'),
     }
 
-    sold_stocks_data = db_obj.get_sold_stocks()
-    executed_history = db_obj.get_executed_stops()
-    active_stops = db_obj.get_stop_orders(default_stop_orders.copy())
-    cash_state = _normalize_cash_state(db_obj.get_extra_cash())
+    _old_sold_stocks = db_obj.get_sold_stocks() or []
+    _old_executed_history = db_obj.get_executed_stops() or []
+    _old_active_stops = db_obj.get_stop_orders(default_stop_orders.copy()) or {}
+    _old_cash_state = _normalize_cash_state(db_obj.get_extra_cash())
+    if not isinstance(_old_sold_stocks, list) or not isinstance(_old_executed_history, list):
+        raise RuntimeError("נתוני היסטוריית המכירות אינם תקינים; לא בוצע שינוי")
+    if not isinstance(_old_active_stops, dict):
+        raise RuntimeError("נתוני פקודות הסטופ אינם תקינים; לא בוצע שינוי")
+    sold_stocks_data = copy.deepcopy(_old_sold_stocks)
+    executed_history = copy.deepcopy(_old_executed_history)
+    active_stops = copy.deepcopy(_old_active_stops)
+    cash_state = copy.deepcopy(_old_cash_state)
 
-    if not any(_is_same_sale(item, sale_entry) for item in sold_stocks_data):
-        sold_stocks_data.append(sale_entry)
+    if any(_is_same_sale(item, sale_entry) for item in sold_stocks_data):
+        raise ValueError("המכירה כבר נרשמה; המזומן לא עודכן שוב")
+    sold_stocks_data.append(sale_entry)
     if not any(_is_same_sale(item, sale_entry) for item in executed_history):
-        executed_history.append(sale_entry)
+        executed_history.append(copy.deepcopy(sale_entry))
 
     if currency == 'ILS':
         cash_state['sale_cash_ils'] += _proceeds
@@ -453,25 +553,32 @@ def _record_sale(db_obj, ticker, name, qty, sale_price, currency, sale_date, sto
     if ticker in active_stops:
         del active_stops[ticker]
 
-    db_obj.save_sold_stocks(sold_stocks_data)
-    db_obj.save_executed_stops(executed_history)
-    db_obj.save_stop_orders(active_stops)
-    db_obj.save_extra_cash(cash_state)
+    if not _save_state_bundle([
+        (db_obj.save_sold_stocks, sold_stocks_data, _old_sold_stocks),
+        (db_obj.save_executed_stops, executed_history, _old_executed_history),
+        (db_obj.save_stop_orders, active_stops, _old_active_stops),
+        (db_obj.save_extra_cash, cash_state, _old_cash_state),
+    ]):
+        raise RuntimeError("שמירת המכירה נכשלה; בוצע ניסיון שחזור של המצב הקודם")
     return sale_entry
 
 # --- טעינת מכירות (סטופים שבוצעו) — הסרת מניות שנמכרו + הוספת תמורה למזומן ---
-_sold_stocks = db.get_sold_stocks()
+_sold_stocks = db.get_sold_stocks() or []
+if not isinstance(_sold_stocks, list):
+    _sold_stocks = []
 # קבץ לפי טיקר — שמור רק את תאריך המכירה האחרון לכל טיקר
 _latest_sale_date = {}
 for _sold in _sold_stocks:
-    _t = _sold['ticker']
+    if not isinstance(_sold, dict) or not _sold.get('ticker'):
+        continue
+    _t = normalize_market_ticker(_sold['ticker'])
     _sd = _sold.get('date', '')
     if _t not in _latest_sale_date or _sd > _latest_sale_date[_t]:
         _latest_sale_date[_t] = _sd
 for _t, _sale_date in _latest_sale_date.items():
     # הסר רק אם תאריך המכירה האחרון הוא אחרי תאריך הרכישה הנוכחי
     _purchase_date_cb = cost_basis.get(_t, {}).get('date', '')
-    if _purchase_date_cb and _sale_date[:10] <= _purchase_date_cb:
+    if _purchase_date_cb and _sale_date[:10] < _purchase_date_cb:
         continue  # נקנה מחדש אחרי המכירה — לא להסיר
     # הסר מ-portfolio (US stocks)
     if _t in portfolio:
@@ -484,17 +591,45 @@ for _t, _sale_date in _latest_sale_date.items():
         del cost_basis[_t]
 
 # --- טעינת רכישות ידניות שנשמרו דרך הדשבורד ---
-_purchased_stocks = db.get_purchased_stocks()
-for _ps in _purchased_stocks:
+_all_purchased_stocks = db.get_purchased_stocks() or []
+if not isinstance(_all_purchased_stocks, list):
+    _all_purchased_stocks = []
+_purchased_stocks = [
+    _ps for _ps in _all_purchased_stocks
+    if _is_valid_purchase_record(_ps)
+]
+_reopened_tickers = set()
+for _ps in sorted(
+    _purchased_stocks,
+    key=lambda item: _record_timestamp(item.get('date'), item.get('registered_at')),
+):
+    if not _ps.get('ticker'):
+        continue
     _pt = normalize_market_ticker(_ps['ticker'])
     # בדוק אם נמכרה אחרי — אם כן, אל תוסיף
     _last_sale = _latest_sale_date.get(_pt, '')
     _buy_date = _ps.get('date', '')
-    if _last_sale and _last_sale[:10] > _buy_date[:10]:
+    if _last_sale and not _purchase_is_after_sale(_ps, _last_sale):
         continue  # נמכרה אחרי הרכישה — לא להוסיף
-    _add_qty = float(_ps['qty'])
-    _add_price = float(_ps['price'])
+    _first_purchase_after_sale = bool(_last_sale) and _pt not in _reopened_tickers
+    if _first_purchase_after_sale:
+        # פוזיציה שנפתחה מחדש לא יורשת סטופ ישן מהפוזיציה שנמכרה.
+        default_stop_orders.pop(_pt, None)
+        _reopened_tickers.add(_pt)
+    try:
+        _add_qty = float(_ps['qty'])
+        _add_price = float(_ps['price'])
+    except (TypeError, ValueError, KeyError):
+        continue
+    if _add_qty <= 0 or _add_price <= 0:
+        continue
     _add_currency = _ps.get('currency', 'USD')
+    _purchase_commission = float(
+        _ps.get('commission_usd', TRADE_COMMISSION_USD if _add_currency == 'USD' else 0.0)
+    )
+    _effective_add_price = _effective_purchase_price(
+        _add_price, _add_qty, _add_currency, _purchase_commission
+    )
 
     if _pt in portfolio:
         # טיקר קיים — הוסף כמות וחשב ממוצע משוקלל
@@ -505,12 +640,12 @@ for _ps in _purchased_stocks:
         portfolio[_pt]['qty'] = _total_qty
         if _total_qty > 0:
             cost_basis[_pt] = {
-                'price': round((_existing_price * _existing_qty + _add_price * _add_qty) / _total_qty, 4),
+                'price': round((_existing_price * _existing_qty + _effective_add_price * _add_qty) / _total_qty, 4),
                 'currency': cost_basis.get(_pt, {}).get('currency', _add_currency),
                 'date': _original_date,  # שמור תאריך רכישה מקורי — לא תאריך התוספת
                 'last_add_date': _buy_date[:10],
                 'last_add_qty': _add_qty,
-                'last_add_price': _add_price,
+                'last_add_price': _effective_add_price,
             }
     else:
         # טיקר חדש — צור ערך חדש
@@ -520,12 +655,12 @@ for _ps in _purchased_stocks:
             'name': _ps.get('name', _pt),
         }
         cost_basis[_pt] = {
-            'price': _add_price,
+            'price': _effective_add_price,
             'currency': _add_currency,
             'date': _buy_date[:10],
         }
-    # הוסף סטופ אם הוגדר ולא קיים כבר
-    if _ps.get('stop_price') and _pt not in default_stop_orders:
+    # הסטופ האחרון שהוגדר ברכישה הוא ברירת המחדל לשחזור מצב.
+    if _ps.get('stop_price'):
         default_stop_orders[_pt] = {
             'stop_price': float(_ps['stop_price']),
             'currency': _ps.get('stop_currency', _add_currency),
@@ -547,42 +682,50 @@ def calc_atr(hist_df, period=14):
         return sum(tr) / len(tr) if tr else None
     return sum(tr[-period:]) / period
 
-def _funder_cache_ttl():
-    """מחשב TTL דינמי לפאנדר — רענון פעם ביום, שעתיים אחרי פתיחת מסחר (12:00 IST)"""
-    from datetime import timedelta
-    import pytz
-    now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
-    israel_tz = pytz.timezone('Asia/Jerusalem')
-    now_il = now_utc.astimezone(israel_tz)
-    # מועד הרענון הבא: 12:00 ישראל (שעתיים אחרי פתיחת מסחר)
-    refresh_today = now_il.replace(hour=12, minute=0, second=0, microsecond=0)
-    if now_il >= refresh_today:
-        # כבר עבר 12:00 היום — הרענון הבא מחר ב-12:00
-        next_refresh = refresh_today + timedelta(days=1)
-    else:
-        next_refresh = refresh_today
-    ttl_seconds = max(int((next_refresh - now_il).total_seconds()), 60)
-    return ttl_seconds
-
-def get_funder_price(fund_id):
-    """משיכת מחיר קרן נאמנות מאתר funder.co.il"""
+def parse_mutual_fund_purchase_price(page_html):
+    """Extract the purchase quote (agorot) from the Bizportal fund header."""
     import re as _re
+    if not page_html:
+        return None
+    marker_index = page_html.find('id="paper_change"')
+    if marker_index < 0:
+        return None
+    header_block = page_html[marker_index:marker_index + 2500]
+    quoted_numbers = _re.findall(
+        r'<div\s+class="num">\s*([\d,.]+)\s*</div>',
+        header_block,
+        flags=_re.IGNORECASE,
+    )
+    if not quoted_numbers:
+        return None
+    # הכותרת מציגה מחיר פדיון ולאחריו מחיר קנייה. אם קיים רק ערך אחד, השתמש בו.
+    raw_value = quoted_numbers[1] if len(quoted_numbers) > 1 else quoted_numbers[0]
     try:
-        r = requests.get(
-            f'https://www.funder.co.il/fund/{fund_id}',
-            headers={'User-Agent': 'Mozilla/5.0'},
+        price = float(raw_value.replace(',', ''))
+    except (TypeError, ValueError):
+        return None
+    return price if 10 <= price <= 100000 else None
+
+
+def get_mutual_fund_price(fund_id):
+    """Fetch a fresh Israeli mutual-fund purchase quote in agorot."""
+    try:
+        response = requests.get(
+            f'https://www.bizportal.co.il/mutualfunds/quote/generalview/{fund_id}',
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept-Language': 'he-IL,he;q=0.9,en;q=0.8',
+            },
             timeout=15
         )
-        if r.ok:
-            m = _re.search(r'"buyPrice":([\d.]+)', r.text)
-            if m:
-                return float(m.group(1))
-    except:
-        pass
+        if response.ok:
+            return parse_mutual_fund_purchase_price(response.text)
+    except requests.RequestException:
+        return None
     return None
 
-def _funder_target_refresh_date():
-    """תאריך היעד לעדכון: אחרי 12:00 ישראל - היום, לפני כן - אתמול."""
+def _fund_target_refresh_date():
+    """תאריך יעד לעדכון מחיר קרן: אחרי 12:00 ישראל היום, ולפני כן יום קודם."""
     from datetime import timedelta
     import pytz
     now_il = datetime.utcnow().replace(tzinfo=pytz.utc).astimezone(pytz.timezone('Asia/Jerusalem'))
@@ -814,10 +957,10 @@ def get_stock_insights(ticker, info):
     return insights
 
 # --- טאבים לניווט ---
-tab1, tab2, tab3 = st.tabs(["📊 דשבורד ראשי", "🎯 חזית היעילות", "📚 שיעורים פרטיים"])
+main_tab, lessons_tab = st.tabs(["📊 דשבורד ראשי", "📚 שיעורים פרטיים"])
 
 # ==================== TAB 1: דשבורד ראשי ====================
-with tab1:
+with main_tab:
     st.title("📊 דשבורד ניהול השקעות - Core/Satellite")
 
     # מחשבון איזון מחדש (Rebalancing Calculator)
@@ -844,7 +987,8 @@ with tab1:
     _sale_cash_ils = _saved_deposits.get("sale_cash_ils", 0.0)
     # חישוב דינמי — סך כל עלויות הרכישות שנרשמו + עמלות
     _purchase_deductions_usd = round(sum(
-        float(_ps['qty']) * float(_ps['price']) + TRADE_COMMISSION_USD
+        float(_ps['qty']) * float(_ps['price'])
+        + float(_ps.get('commission_usd', TRADE_COMMISSION_USD))
         for _ps in _purchased_stocks
         if _ps.get('currency', 'USD') == 'USD'
     ), 2)
@@ -856,15 +1000,19 @@ with tab1:
     )
     
     if st.sidebar.button("✅ הפקד", disabled=(extra_cash_ils <= 0)):
-        _saved_deposits["total_deposited_ils"] = _total_deposited_ils + extra_cash_ils
-        _saved_deposits.setdefault("deposits", []).append({
+        _deposit_state = copy.deepcopy(_saved_deposits)
+        _deposit_state["total_deposited_ils"] = _total_deposited_ils + extra_cash_ils
+        _deposit_state.setdefault("deposits", []).append({
+            "id": uuid.uuid4().hex,
             "amount_ils": extra_cash_ils,
-            "date": __import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M')
+            "date": datetime.now().isoformat(timespec='seconds'),
         })
-        db.save_extra_cash(_saved_deposits)
-        _total_deposited_ils += extra_cash_ils
-        st.sidebar.success(f"✅ הופקדו ₪{extra_cash_ils:,.0f} בהצלחה!")
-        st.rerun()
+        if db.save_extra_cash(_deposit_state):
+            _total_deposited_ils += extra_cash_ils
+            st.sidebar.success(f"✅ הופקדו ₪{extra_cash_ils:,.0f} בהצלחה!")
+            st.rerun()
+        else:
+            st.sidebar.error("ההפקדה לא נשמרה; יתרת המזומן לא שונתה.")
     
     # הסכום הנוסף שמתווסף ל-CASH_USD בזמן ריצה
     extra_cash_ils = _total_deposited_ils
@@ -875,7 +1023,10 @@ with tab1:
     st.sidebar.caption("מחירי קרנות ישראליות:")
     
     # --- שמירת מחירים לקובץ JSON כדי ששום rerun לא ימחק אותם ---
-    saved_prices = db.get_il_prices()
+    saved_prices = db.get_il_prices() or {}
+    if not isinstance(saved_prices, dict):
+        saved_prices = {}
+        st.sidebar.error("נתוני המחירים השמורים אינם תקינים; לא בוצעה דריסה שלהם.")
     
     il_prices = {}
     _il_prices_changed = False
@@ -884,36 +1035,59 @@ with tab1:
             il_prices[ticker] = info['default_price_ils']
             continue
         
-        # --- נכסים עם funder_id — מחיר אוטומטי, בלי input ידני ---
-        _funder_id = info.get('funder_id')
-        if _funder_id:
-            _marker_key = f"__funder_last_update__{ticker}"
-            _target_date = _funder_target_refresh_date()
+        # --- קרנות נאמנות ישראליות — מחיר אוטומטי ושמירה מאומתת ---
+        _fund_id = info.get('fund_id') or info.get('funder_id')
+        if _fund_id:
+            _marker_key = f"__fund_last_update__{ticker}"
+            _timestamp_key = f"__fund_last_update_ts__{ticker}"
+            _source_key = f"__fund_price_source__{ticker}"
+            _raw_key = f"__fund_raw_price__{ticker}"
+            _target_date = _fund_target_refresh_date()
             _needs_refresh = saved_prices.get(_marker_key) != _target_date
 
-            # כפתור רענון ידני — מאפשר לאלץ שליפה מחדש מ-funder
+            # הכפתור תמיד מבצע קריאה חדשה; אין cache שמחזיר ערך ישן.
             _col1, _col2 = st.sidebar.columns([3, 1])
-            if _col2.button("🔄", key=f"force_refresh_{ticker}", help=f"רענן מחיר {info['name']} מ-funder"):
-                _needs_refresh = True
-                if _marker_key in saved_prices:
-                    del saved_prices[_marker_key]
+            _force_refresh = _col2.button(
+                "🔄",
+                key=f"force_refresh_{ticker}",
+                help=f"משוך ושמור מחיר קנייה עדכני עבור {info['name']}",
+            )
+            _refresh_requested = _needs_refresh or _force_refresh
 
             # רענון פעם ביום לפי תאריך היעד
-            if _needs_refresh:
-                _funder_raw = get_funder_price(_funder_id)
-                if _funder_raw:
-                    _divisor = info.get('funder_divisor', 1)
-                    auto_price = _funder_raw / _divisor
-                    saved_prices[ticker] = auto_price
-                    saved_prices[_marker_key] = _target_date
-                    _il_prices_changed = True
+            if _refresh_requested:
+                _fund_raw = get_mutual_fund_price(_fund_id)
+                _divisor = float(info.get('fund_price_divisor', info.get('funder_divisor', 1)))
+                _fund_price_ils = round(_fund_raw / _divisor, 6) if _fund_raw and _divisor > 0 else None
+                if _fund_price_ils and 0.01 <= _fund_price_ils <= 10000:
+                    _candidate_prices = dict(saved_prices)
+                    _candidate_prices[ticker] = _fund_price_ils
+                    _candidate_prices[_marker_key] = _target_date
+                    _candidate_prices[_timestamp_key] = datetime.now().isoformat(timespec="seconds")
+                    _candidate_prices[_source_key] = "bizportal_purchase_price"
+                    _candidate_prices[_raw_key] = _fund_raw
+                    if db.save_il_prices(_candidate_prices):
+                        _verified_prices = db.get_il_prices() or {}
+                        _verified_price = _lesson_number(_verified_prices.get(ticker), default=None)
+                        if _verified_price is not None and abs(_verified_price - _fund_price_ils) < 0.000001:
+                            saved_prices = _verified_prices
+                            if _force_refresh:
+                                st.sidebar.success(f"נשמר מחיר חדש: ₪{_fund_price_ils:.4f}")
+                        else:
+                            st.sidebar.error("המחיר נשלח לשמירה אך לא אומת בקריאה חוזרת.")
+                    else:
+                        st.sidebar.error("משיכת המחיר הצליחה, אך השמירה נכשלה.")
+                elif _force_refresh:
+                    st.sidebar.error("לא התקבל מחיר קנייה תקין מהמקור. המחיר השמור לא שונה.")
 
             if ticker in saved_prices:
-                il_prices[ticker] = saved_prices[ticker]
-                _col1.caption(f"💰 {info['name']} ✅ ₪{il_prices[ticker]:.2f}")
+                il_prices[ticker] = float(saved_prices[ticker])
+                _updated_at = saved_prices.get(_timestamp_key, saved_prices.get(_marker_key, "לא ידוע"))
+                _col1.caption(f"💰 {info['name']} ✅ ₪{il_prices[ticker]:.4f}")
+                _col1.caption(f"עודכן: {_updated_at}")
             else:
                 il_prices[ticker] = info['default_price_ils']
-                _col1.caption(f"💰 {info['name']} ⚠️ ₪{il_prices[ticker]:.2f} (לא עודכן)")
+                _col1.caption(f"💰 {info['name']} ⚠️ ₪{il_prices[ticker]:.4f} (ברירת מחדל)")
             continue
         
         sk = f"il_price_{ticker}"
@@ -952,7 +1126,8 @@ with tab1:
     
     # שמור רק אם משהו השתנה
     if _il_prices_changed:
-        db.save_il_prices(saved_prices)
+        if not db.save_il_prices(saved_prices):
+            st.sidebar.error("שמירת המחירים הידניים נכשלה; הערכים הקודמים נשמרו.")
 
     # כפתור רענון
     col_refresh, col_empty = st.columns([1, 4])
@@ -1073,7 +1248,12 @@ with tab1:
         st.success(f"✅ נטענו {len(df)} נכסים בהצלחה מתוך {total_assets} | שער USD/ILS: ₪{usd_to_ils:.3f}")
         
         if israeli_stocks:
-            _manual_count = sum(1 for _v in israeli_stocks.values() if not _v.get('funder_id') and _v.get('currency') != 'USD' and not _v.get('yf_ticker'))
+            _manual_count = sum(
+                1 for _v in israeli_stocks.values()
+                if not (_v.get('fund_id') or _v.get('funder_id'))
+                and _v.get('currency') != 'USD'
+                and not _v.get('yf_ticker')
+            )
             if _manual_count > 0:
                 st.info(f"ℹ️ {_manual_count} נכסים ישראליים עם מחירים ידניים")
 
@@ -1082,12 +1262,15 @@ with tab1:
         
         if db.baseline_exists():
             baseline_data = db.get_baseline()
+            if not isinstance(baseline_data, dict):
+                baseline_data = {}
             baseline_value = baseline_data.get('invested_value', baseline_data.get('value', total_invested))
             baseline_date = baseline_data.get('date', today)
         else:
             baseline_value = total_invested
             baseline_date = today
-            db.save_baseline({'invested_value': total_invested, 'date': baseline_date})
+            if not db.save_baseline({'invested_value': total_invested, 'date': baseline_date}):
+                st.warning("ערך הבסיס חושב אך לא נשמר; ההשוואה תחושב מחדש ברענון הבא.")
         
         if baseline_value > 0:
             pct_change = ((total_invested - baseline_value) / baseline_value) * 100
@@ -1448,7 +1631,10 @@ with tab1:
         st.subheader("📥 רכישת מניה")
 
         from datetime import date as _date_cls
-        _all_purchases = db.get_purchased_stocks()
+        _purchase_records = db.get_purchased_stocks() or []
+        if not isinstance(_purchase_records, list):
+            _purchase_records = []
+        _all_purchases = [p for p in _purchase_records if _is_valid_purchase_record(p)]
 
         _buy_cols1 = st.columns([2, 2, 1])
         with _buy_cols1[0]:
@@ -1499,6 +1685,7 @@ with tab1:
                 _buy_name_final = _buy_name if _buy_name else _buy_ticker
                 _buy_date_str = _buy_date.isoformat()
                 _new_purchase = {
+                    'id': uuid.uuid4().hex,
                     'ticker': _buy_ticker,
                     'name': _buy_name_final,
                     'type': _buy_type,
@@ -1508,26 +1695,38 @@ with tab1:
                     'date': _buy_date_str,
                     'stop_price': round(float(_buy_stop), 2) if _buy_stop > 0 else None,
                     'stop_currency': 'USD',
-                    'registered_at': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                    'commission_usd': TRADE_COMMISSION_USD,
+                    'registered_at': datetime.now().isoformat(timespec='seconds'),
                 }
-                _existing_purchases = db.get_purchased_stocks()
-                _existing_purchases.append(_new_purchase)
-                db.save_purchased_stocks(_existing_purchases)
-                # אם הוגדר סטופ — שמור ב-active stops
+                _existing_purchases = db.get_purchased_stocks() or []
+                if not isinstance(_existing_purchases, list):
+                    _existing_purchases = []
+                _updated_purchases = list(_existing_purchases) + [_new_purchase]
+                _purchase_save_steps = [
+                    (db.save_purchased_stocks, _updated_purchases, _existing_purchases),
+                ]
+                # אם הוגדר סטופ — שמור אותו באותה פעולת מצב; כשל מחזיר את הרכישה לאחור.
                 if _buy_stop > 0:
-                    _active_stops_buy = db.get_stop_orders(default_stop_orders.copy())
+                    _old_stops_buy = db.get_stop_orders(default_stop_orders.copy()) or {}
+                    _active_stops_buy = copy.deepcopy(_old_stops_buy)
                     _active_stops_buy[_buy_ticker] = {
                         'stop_price': round(float(_buy_stop), 2),
                         'currency': 'USD',
+                        'check_from_ts': datetime.utcnow().isoformat(),
                     }
-                    db.save_stop_orders(_active_stops_buy)
-                st.success(
-                    f"✅ נרשמה רכישה של **{_buy_ticker}** ({_buy_name_final}) — "
-                    f"{_buy_qty:.4g} יח' × ${_buy_price:,.3f} = ${_buy_qty * _buy_price:,.2f}"
-                    f" + עמלה ${TRADE_COMMISSION_USD:.2f}."
-                    + (f" סטופ לוס: ${_buy_stop:,.2f}" if _buy_stop > 0 else "")
-                )
-                st.rerun()
+                    _purchase_save_steps.append(
+                        (db.save_stop_orders, _active_stops_buy, _old_stops_buy)
+                    )
+                if _save_state_bundle(_purchase_save_steps):
+                    st.success(
+                        f"✅ נרשמה רכישה של **{_buy_ticker}** ({_buy_name_final}) — "
+                        f"{_buy_qty:.4g} יח' × ${_buy_price:,.3f} = ${_buy_qty * _buy_price:,.2f}"
+                        f" + עמלה ${TRADE_COMMISSION_USD:.2f}."
+                        + (f" סטופ לוס: ${_buy_stop:,.2f}" if _buy_stop > 0 else "")
+                    )
+                    st.rerun()
+                else:
+                    st.error("שמירת הרכישה נכשלה; מצב הרכישות והסטופים הוחזר לאחור.")
 
         # טבלת רכישות שנרשמו
         if _all_purchases:
@@ -1546,7 +1745,7 @@ with tab1:
                     })
                 st.dataframe(pd.DataFrame(_purch_rows), hide_index=True, use_container_width=True)
 
-                st.markdown("**מחיקת רכישה (שגיאה בהזנה):**")
+                st.markdown("**ביטול רכישה שגויה (העברה לארכיון):**")
                 _del_purch_opts = [
                     f"{_p['ticker']} | {_p.get('date','—')} | {_p['qty']} יח' @ ${_p['price']}"
                     for _p in _all_purchases
@@ -1556,12 +1755,49 @@ with tab1:
                     _del_purch_sel = st.selectbox("בחר רכישה למחיקה", _del_purch_opts, key="del_purch_sel")
                 with _del_col2:
                     st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("🗑️ מחק", key="del_purch_btn", use_container_width=True):
+                    _selected_purchase = _all_purchases[_del_purch_opts.index(_del_purch_sel)]
+                    _selected_purchase_ts = _record_timestamp(
+                        _selected_purchase.get('date'), _selected_purchase.get('registered_at')
+                    )
+                    _linked_sale = any(
+                        normalize_market_ticker(s.get('ticker')) == normalize_market_ticker(_selected_purchase.get('ticker'))
+                        and _record_timestamp(s.get('date')) >= _selected_purchase_ts
+                        for s in _sold_stocks if isinstance(s, dict)
+                    )
+                    if st.button(
+                        "🗄️ ארכיון",
+                        key="del_purch_btn",
+                        use_container_width=True,
+                        disabled=_linked_sale,
+                    ):
                         _del_idx = _del_purch_opts.index(_del_purch_sel)
-                        _deleted_p = _all_purchases.pop(_del_idx)
-                        db.save_purchased_stocks(_all_purchases)
-                        st.success(f"🗑️ נמחקה רכישה: {_deleted_p['ticker']} {_deleted_p.get('date','')}")
-                        st.rerun()
+                        _selected_id = _all_purchases[_del_idx].get('id')
+                        _source_idx = next(
+                            (
+                                idx for idx, item in enumerate(_purchase_records)
+                                if (_selected_id and item.get('id') == _selected_id)
+                                or (not _selected_id and item is _all_purchases[_del_idx])
+                            ),
+                            None,
+                        )
+                        if _source_idx is None:
+                            st.error("לא ניתן לזהות את רשומת המקור; לא בוצע שינוי.")
+                        else:
+                            _archived_purchase = dict(_purchase_records[_source_idx])
+                            _archived_purchase['id'] = _archived_purchase.get('id') or uuid.uuid4().hex
+                            _archived_purchase['archived_at'] = datetime.now().isoformat(timespec='seconds')
+                            _updated_purchase_records = list(_purchase_records)
+                            _updated_purchase_records[_source_idx] = _archived_purchase
+                            if db.save_purchased_stocks(_updated_purchase_records):
+                                st.success(
+                                    f"הרכישה {_archived_purchase['ticker']} {_archived_purchase.get('date','')} "
+                                    "הועברה לארכיון ולא תיכלל בתיק או במזומן."
+                                )
+                                st.rerun()
+                            else:
+                                st.error("העברת הרכישה לארכיון נכשלה; הנתונים לא שונו.")
+                    if _linked_sale:
+                        st.caption("לא ניתן לבטל רכישה שמקושרת למכירה מאוחרת יותר.")
 
         # ==================== STOP MARKET ORDERS ====================
         try:
@@ -1569,19 +1805,48 @@ with tab1:
             st.subheader("🛑 פקודות Stop Market")
             
             # טען פקודות סטופ פעילות וביצועים קודמים
-            active_stops = db.get_stop_orders(default_stop_orders.copy())
-            executed_history = db.get_executed_stops()
-            
-            # העבר פורמט ישן (מספר בלבד) לפורמט חדש (dict עם currency)
-            for _sk, _sv in list(active_stops.items()):
-                if isinstance(_sv, (int, float)):
-                    active_stops[_sk] = {"stop_price": _sv, "currency": "USD"}
-            
-            # סנכרן סטופים חדשים מ-default שלא קיימים ב-DB
+            active_stops = db.get_stop_orders(copy.deepcopy(default_stop_orders)) or {}
+            executed_history = db.get_executed_stops() or []
+            if not isinstance(active_stops, dict):
+                active_stops = {}
+            if not isinstance(executed_history, list):
+                executed_history = []
+
+            _active_position_tickers = set(portfolio) | {
+                ticker for ticker, info in israeli_stocks.items()
+                if info.get('type') != 'Cash'
+            }
+
+            # נרמל פורמט וטיקרים, והסר סטופים שאין מאחוריהם פוזיציה פעילה.
+            _normalized_stops = {}
             _sync_needed = False
+            for _sk, _sv in list(active_stops.items()):
+                _normalized_key = normalize_market_ticker(_sk)
+                if _normalized_key not in _active_position_tickers:
+                    _sync_needed = True
+                    continue
+                if isinstance(_sv, (int, float)):
+                    _sv = {"stop_price": float(_sv), "currency": "USD"}
+                    _sync_needed = True
+                if not isinstance(_sv, dict):
+                    _sync_needed = True
+                    continue
+                try:
+                    if float(_sv.get('stop_price', 0)) <= 0:
+                        _sync_needed = True
+                        continue
+                except (TypeError, ValueError):
+                    _sync_needed = True
+                    continue
+                _normalized_stops[_normalized_key] = copy.deepcopy(_sv)
+                if _normalized_key != _sk:
+                    _sync_needed = True
+            active_stops = _normalized_stops
+            
+            # סנכרן ברירות מחדל רק עבור פוזיציות שקיימות כרגע.
             for _dk, _dv in default_stop_orders.items():
-                if _dk not in active_stops:
-                    active_stops[_dk] = _dv
+                if _dk in _active_position_tickers and _dk not in active_stops:
+                    active_stops[_dk] = copy.deepcopy(_dv)
                     _sync_needed = True
 
             # מיגרציה: המר check_from_date ישן ל-check_from_ts (חותמת זמן UTC מלאה).
@@ -1608,7 +1873,8 @@ with tab1:
             
             # אם אין קובץ — שמור את ברירות המחדל
             if not db.stop_orders_file_exists() or _sync_needed or _retrofit_needed:
-                db.save_stop_orders(active_stops)
+                if not db.save_stop_orders(active_stops):
+                    raise RuntimeError("עדכון רשימת הסטופים לא נשמר; בדיקת הסטופים הופסקה")
             
             # בנה מיפוי של כל הנכסים (US + ישראליים) עם מחירים נוכחיים
             all_assets = {}
@@ -1663,7 +1929,8 @@ with tab1:
                     _trailing_updated = True
             
             if _trailing_updated:
-                db.save_stop_orders(active_stops)
+                if not db.save_stop_orders(active_stops):
+                    raise RuntimeError("עדכון ה-Trailing Stop לא נשמר; בדיקת הסטופים הופסקה")
             
             # בדוק כל פקודה פעילה מול מחיר נוכחי + Low intraday מסונן לפי שעת עדכון הסטופ
             newly_executed = []
@@ -1746,7 +2013,7 @@ with tab1:
                         'trigger_reason': _trigger_reason,
                         'proceeds': round(proceeds, 2),
                         'currency': stop_currency,
-                        'date': datetime.now().strftime('%Y-%m-%d %H:%M')
+                        'date': datetime.now().isoformat(timespec='seconds')
                     })
             
             # אם יש פקודות שהתממשו — הצג התראה
@@ -1797,9 +2064,10 @@ with tab1:
                             qty=ex['qty'],
                             sale_price=actual_price,
                             currency=ex['currency'],
-                            sale_date=datetime.now().strftime('%Y-%m-%d %H:%M'),
+                            sale_date=datetime.now().isoformat(timespec='seconds'),
                             stop_price=ex['stop_price'],
                             reason='stop',
+                            fx_rate=usd_to_ils,
                         )
                         actual_proceeds = sold_entry['proceeds']
                         
@@ -1936,12 +2204,15 @@ with tab1:
                     with _edit_cols[3]:
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button("💾 עדכן", key="update_stop_btn", use_container_width=True):
-                            active_stops[_edit_stop_ticker]['stop_price'] = round(_new_stop_price, 2)
+                            _updated_stops = copy.deepcopy(active_stops)
+                            _updated_stops[_edit_stop_ticker]['stop_price'] = round(_new_stop_price, 2)
                             # בדיקת Low תסנן רק נרות שנצברו אחרי רגע זה
-                            active_stops[_edit_stop_ticker]['check_from_ts'] = datetime.utcnow().isoformat()
-                            db.save_stop_orders(active_stops)
-                            st.success(f"✅ סטופ {_edit_stop_ticker} עודכן ל-{_stop_sym}{_new_stop_price:,.2f}")
-                            st.rerun()
+                            _updated_stops[_edit_stop_ticker]['check_from_ts'] = datetime.utcnow().isoformat()
+                            if db.save_stop_orders(_updated_stops):
+                                st.success(f"✅ סטופ {_edit_stop_ticker} עודכן ל-{_stop_sym}{_new_stop_price:,.2f}")
+                                st.rerun()
+                            else:
+                                st.error("עדכון הסטופ לא נשמר; המחיר הקודם נשאר פעיל.")
             else:
                 st.info("אין פקודות סטופ פעילות.")
 
@@ -1979,9 +2250,10 @@ with tab1:
                             qty=_manual_asset['qty'],
                             sale_price=_manual_sale_price,
                             currency=_manual_asset['currency'],
-                            sale_date=datetime.now().strftime('%Y-%m-%d %H:%M'),
+                            sale_date=datetime.now().isoformat(timespec='seconds'),
                             stop_price=_manual_stop,
                             reason='manual',
+                            fx_rate=usd_to_ils,
                         )
                         st.success(
                             f"✅ נרשמה מכירה של {_manual_ticker} במחיר {_manual_sym}{_manual_sale_price:,.2f}. "
@@ -1998,27 +2270,52 @@ with tab1:
                     total_realized_pnl_usd = 0.0
                     total_realized_pnl_ils = 0.0
                     for ex in reversed(executed_history):
+                        if not isinstance(ex, dict) or not ex.get('ticker'):
+                            continue
                         _is_ils = ex.get('currency') == "ILS"
                         sym = "₪" if _is_ils else "$"
-                        _sale_p = ex.get('sale_price', ex.get('market_price', ex.get('stop_price')))
-                        _qty = ex.get('qty', 0)
-                        _commission = ex.get('commission_usd', 0.0)
+                        try:
+                            _sale_p = float(ex.get('sale_price', ex.get('market_price', ex.get('stop_price'))))
+                            _qty = float(ex.get('qty', 0))
+                            _commission = float(ex.get('commission_usd', 0.0) or 0.0)
+                        except (TypeError, ValueError):
+                            continue
+                        if _sale_p <= 0 or _qty <= 0:
+                            continue
                         _gross_proceeds = _sale_p * _qty
                         _stored_proceeds = ex.get('proceeds')
                         if _stored_proceeds is None:
                             _proceeds = round(_gross_proceeds - (_commission if not _is_ils else 0.0), 2)
-                        elif (not _is_ils) and _commission and abs(float(_stored_proceeds) - _gross_proceeds) < 0.02:
-                            _proceeds = round(float(_stored_proceeds) - _commission, 2)
                         else:
-                            _proceeds = float(_stored_proceeds)
+                            try:
+                                _stored_proceeds = float(_stored_proceeds)
+                            except (TypeError, ValueError):
+                                _stored_proceeds = None
+                            if _stored_proceeds is None:
+                                _proceeds = round(_gross_proceeds - (_commission if not _is_ils else 0.0), 2)
+                            elif (not _is_ils) and _commission and abs(_stored_proceeds - _gross_proceeds) < 0.02:
+                                _proceeds = round(_stored_proceeds - _commission, 2)
+                            else:
+                                _proceeds = _stored_proceeds
                         # חישוב רווח/הפסד — קודם מהרשומה עצמה, אחרת מה-cost_basis
                         _cost_per = ex.get('cost_per_share')
                         if _cost_per is None:
                             _cb = cost_basis.get(ex['ticker'])
                             _cost_per = _cb['price'] if _cb else None
                         if _cost_per:
+                            try:
+                                _cost_per = float(_cost_per)
+                            except (TypeError, ValueError):
+                                _cost_per = None
+                        if _cost_per and _cost_per > 0:
                             _total_cost = _cost_per * _qty
-                            _pnl = _proceeds - _total_cost
+                            _commission_in_trade_currency = 0.0
+                            if _is_ils:
+                                try:
+                                    _commission_in_trade_currency = float(ex.get('commission_ils') or 0.0)
+                                except (TypeError, ValueError):
+                                    _commission_in_trade_currency = 0.0
+                            _pnl = _proceeds - _total_cost - _commission_in_trade_currency
                             _pnl_pct = (_pnl / _total_cost * 100) if _total_cost > 0 else 0
                             _pnl_str = f"{sym}{_pnl:+,.2f} ({_pnl_pct:+.1f}%)"
                             _cost_str = f"{sym}{_cost_per:,.2f}"
@@ -2088,14 +2385,29 @@ with tab1:
         if update_div:
             with st.spinner("⏳ מושך נתוני דיבידנד עדכניים..."):
                 fetch_live_dividends.clear()
+                fetch_notification_data.clear()
                 live = fetch_live_dividends(_current_us_tickers)
+                _live_notifications = fetch_notification_data(_current_us_tickers)
             if live:
-                # שמור ל-DB כדי שישמר בין רענונים
-                _div_cash_state = _normalize_cash_state(db.get_extra_cash())
-                _div_cash_state['saved_dividends'] = live
-                db.save_extra_cash(_div_cash_state)
-                with div_col2:
-                    st.success(f"✅ עודכנו {len(live)} נכסים!")
+                _new_dividend_snapshot = {
+                    "rates": live,
+                    "notifications": {
+                        ticker: {
+                            "ex_div_date": details.get("ex_div_date"),
+                            "div_date": details.get("div_date"),
+                        }
+                        for ticker, details in _live_notifications.items()
+                    },
+                    "tickers": list(_current_us_tickers),
+                    "updated_at": datetime.now().isoformat(timespec="seconds"),
+                    "source": "yfinance",
+                }
+                if db.save_dividend_snapshot(_new_dividend_snapshot):
+                    with div_col2:
+                        st.success(f"✅ נשמרו נתוני דיבידנד עבור {len(live)} נכסים.")
+                else:
+                    with div_col2:
+                        st.error("הנתונים נמשכו אך השמירה נכשלה; הטבלה הקודמת נשארה זמינה.")
             else:
                 with div_col2:
                     st.warning("⚠️ לא הצליח לעדכן")
@@ -2104,7 +2416,13 @@ with tab1:
         # 1. seed רק לנכסים שעדיין בתיק
         # 2. live data שנשמרה ב-DB בעדיפות (לא נדרש רענון בכל פעם)
         _base_div = {k: v for k, v in _seed_dividends.items() if k in portfolio}
-        _saved_live_divs = _saved_deposits.get('saved_dividends', {})
+        _dividend_snapshot = db.get_dividend_snapshot() or {}
+        if not isinstance(_dividend_snapshot, dict):
+            _dividend_snapshot = {}
+        _saved_live_divs = _dividend_snapshot.get('rates', {})
+        # תאימות לנתונים שנשמרו בעבר בתוך מצב המזומן — ללא שינוי או מחיקה שלהם.
+        if not _saved_live_divs:
+            _saved_live_divs = _saved_deposits.get('saved_dividends', {})
         if _saved_live_divs:
             _live_for_portfolio = {k: v for k, v in _saved_live_divs.items() if k in portfolio}
             known_dividends = {**_base_div, **_live_for_portfolio}
@@ -2114,8 +2432,8 @@ with tab1:
         div_rows = []
         total_annual_div_usd = 0
 
-        # שלוף תאריכי ex-dividend (מהcache — ללא קריאת API נוספת)
-        _div_notif = fetch_notification_data(_current_us_tickers)
+        # תאריכי Ex/תשלום מגיעים מה-snapshot השמור ומתעדכנים רק בלחיצה.
+        _div_notif = _dividend_snapshot.get('notifications', {})
 
         for ticker, div_per_share in known_dividends.items():
             if div_per_share <= 0:
@@ -2208,172 +2526,10 @@ with tab1:
                 ) + ("..." if len(_non_div) > 8 else "")
                 st.caption(f"ℹ️ {len(_non_div)} נכסים בתיק לא מחלקים דיבידנד: {_non_div_names}.")
             st.caption("💡 לחץ '🔄 עדכן דיבידנדים' לקבלת נתונים עדכניים מ-yfinance עבור כל הנכסים הנוכחיים בתיק.")
-
-            # ==================== אישור קבלת דיבידנד ====================
-            DIV_TAX_RATE = 0.25  # מס 25%
-
-            _received_divs = db.get_received_dividends()
-            # בנה סט של (ticker, pay_date) שכבר אושרו — תמיכה בפורמט ישן ע"י fallback ל-ex_date
-            _confirmed_keys = {
-                (r['ticker'], r.get('pay_date', r.get('ex_date'))) for r in _received_divs
-            }
-
-            # מצא דיבידנדים שתאריך התשלום עבר ועדיין לא אושרו (בחלון של 60 יום אחורה)
-            _pending_divs = []
-            for _dr in div_rows:
-                _tk = _dr['טיקר']
-                _nd = _div_notif.get(_tk, {})
-                # עדיפות: תאריך תשלום. fallback: ex_div_date + 30 יום (הערכה)
-                _pay_ts = _nd.get('div_date')
-                _ex_ts  = _nd.get('ex_div_date')
-                _ref_dt = None
-                _ref_source = None
-                if _pay_ts:
-                    try:
-                        _ref_dt = datetime.fromtimestamp(_pay_ts)
-                        _ref_source = 'payment'
-                    except Exception:
-                        pass
-                if _ref_dt is None and _ex_ts:
-                    try:
-                        _ref_dt = datetime.fromtimestamp(_ex_ts) + timedelta(days=30)
-                        _ref_source = 'ex+30d'
-                    except Exception:
-                        pass
-                if _ref_dt is None:
-                    continue
-
-                # סינון: אם קנינו את המניה אחרי ה-ex-date — לא מגיע דיבידנד
-                _ex_dt_obj = None
-                if _ex_ts:
-                    try:
-                        _ex_dt_obj = datetime.fromtimestamp(_ex_ts)
-                    except Exception:
-                        pass
-                if _ex_dt_obj is not None:
-                    _buy_date_str = cost_basis.get(_tk, {}).get('date', '')
-                    if _buy_date_str:
-                        try:
-                            _buy_dt = datetime.fromisoformat(_buy_date_str)
-                            if _buy_dt.date() > _ex_dt_obj.date():
-                                continue  # נקנה אחרי ה-ex-date — לא מגיע דיבידנד
-                        except Exception:
-                            pass
-
-                _days_since = (datetime.now() - _ref_dt).days
-                if 0 <= _days_since <= 60:
-                    _pay_key = _ref_dt.strftime('%Y-%m-%d')
-                    if (_tk, _pay_key) not in _confirmed_keys:
-                        _pending_divs.append({
-                            'ticker': _tk,
-                            'name': _dr['שם'],
-                            'pay_date': _pay_key,
-                            'pay_dt': _ref_dt,
-                            'ex_dt': _ex_dt_obj,
-                            'pay_source': _ref_source,
-                            'div_per_share': _dr['דיבידנד שנתי למניה ($)'],
-                            'qty': portfolio[_tk]['qty'],
-                        })
-
-            if _pending_divs:
-                st.markdown("---")
-                st.markdown("### 💸 אישור קבלת דיבידנד")
-                st.caption("הדיבידנדים הבאים הגיעו לתאריך Ex-Dividend ועדיין לא אושרו. אשר קבלה כדי להוסיף למזומן (בניכוי 25% מס).")
-
-                for _pd_idx, _pd in enumerate(_pending_divs):
-                    _gross_est = round(_pd['div_per_share'] * _pd['qty'], 2)
-                    _tax_est   = round(_gross_est * DIV_TAX_RATE, 2)
-                    _net_est   = round(_gross_est - _tax_est, 2)
-                    _src_label = "" if _pd['pay_source'] == 'payment' else " (הערכה)"
-
-                    with st.container():
-                        _pc1, _pc2, _pc3, _pc4, _pc5 = st.columns([3, 1, 1, 1, 1])
-                        with _pc1:
-                            _ex_default = _pd['ex_dt'].date() if _pd.get('ex_dt') else _pd['pay_dt'].date()
-                            _pay_default = _pd['pay_dt'].date()
-                            _src_label = "" if _pd['pay_source'] == 'payment' else " (הערכה)"
-                            _dc1, _dc2, _dc3 = st.columns([2, 1, 1])
-                            with _dc1:
-                                st.markdown(f"**{_pd['name']}** ({_pd['ticker']}) | {_pd['qty']:.4g} יח'")
-                            with _dc2:
-                                _input_ex_date = st.date_input(
-                                    f"Ex-Date{_src_label}",
-                                    value=_ex_default,
-                                    key=f"ex_d_{_pd['ticker']}_{_pd_idx}",
-                                )
-                            with _dc3:
-                                _input_pay_date = st.date_input(
-                                    "תשלום",
-                                    value=_pay_default,
-                                    key=f"pay_d_{_pd['ticker']}_{_pd_idx}",
-                                )
-                        with _pc2:
-                            _actual_gross = st.number_input(
-                                "ברוטו ($)",
-                                min_value=0.0, value=float(_gross_est), step=0.01, format="%.2f",
-                                key=f"div_gross_{_pd['ticker']}_{_pd_idx}",
-                                help="ערך ברירת מחדל מחושב. ניתן לעדכן לסכום שהתקבל בפועל."
-                            )
-                        with _pc3:
-                            _actual_tax = round(_actual_gross * DIV_TAX_RATE, 2)
-                            st.metric("מס 25% ($)", f"${_actual_tax:.2f}")
-                        with _pc4:
-                            _actual_net = round(_actual_gross - _actual_tax, 2)
-                            st.metric("נטו ($)", f"${_actual_net:.2f}")
-                        with _pc5:
-                            st.markdown("<br>", unsafe_allow_html=True)
-                            if st.button("✅ קיבלתי", key=f"confirm_div_{_pd['ticker']}_{_pd_idx}", use_container_width=True):
-                                _received_divs.append({
-                                    'ticker': _pd['ticker'],
-                                    'name': _pd['name'],
-                                    'ex_date': _input_ex_date.isoformat(),
-                                    'pay_date': _input_pay_date.isoformat(),
-                                    'confirmed_date': datetime.now().strftime('%Y-%m-%d %H:%M'),
-                                    'qty': _pd['qty'],
-                                    'gross_usd': round(_actual_gross, 2),
-                                    'tax_usd': round(_actual_tax, 2),
-                                    'net_usd': round(_actual_net, 2),
-                                })
-                                db.save_received_dividends(_received_divs)
-                                # הוסף נטו למזומן
-                                _div_cash = _normalize_cash_state(db.get_extra_cash())
-                                _div_cash['sale_cash_usd'] = round(
-                                    _div_cash.get('sale_cash_usd', 0.0) + _actual_net, 2
-                                )
-                                db.save_extra_cash(_div_cash)
-                                st.success(
-                                    f"✅ דיבידנד {_pd['ticker']} אושר! "
-                                    f"ברוטו: ${_actual_gross:.2f} | מס: ${_actual_tax:.2f} | "
-                                    f"נטו שנוסף למזומן: **${_actual_net:.2f}**"
-                                )
-                                st.rerun()
-
-            # היסטוריית דיבידנדים שאושרו
-            if _received_divs:
-                with st.expander(f"📜 דיבידנדים שהתקבלו ({len(_received_divs)})", expanded=False):
-                    _rdiv_rows = []
-                    _total_net = 0.0
-                    for _r in reversed(_received_divs):
-                        _rdiv_rows.append({
-                            'תאריך אישור': _r.get('confirmed_date', '—'),
-                            'טיקר': _r['ticker'],
-                            'שם': _r['name'],
-                            'Ex-Date': _r.get('ex_date', '—'),
-                            'תאריך תשלום': _r.get('pay_date', _r.get('ex_date', '—')),
-                            'ברוטו ($)': _r.get('gross_usd', 0),
-                            'מס ($)': _r.get('tax_usd', 0),
-                            'נטו ($)': _r.get('net_usd', 0),
-                        })
-                        _total_net += _r.get('net_usd', 0)
-                    st.dataframe(
-                        pd.DataFrame(_rdiv_rows).style.format({
-                            'ברוטו ($)': '${:.2f}',
-                            'מס ($)': '${:.2f}',
-                            'נטו ($)': '${:.2f}',
-                        }),
-                        hide_index=True, use_container_width=True
-                    )
-                    st.metric("💵 סה״כ דיבידנדים שהתקבלו (נטו)", f"${_total_net:,.2f}")
+            _div_updated_at = _dividend_snapshot.get('updated_at')
+            if _div_updated_at:
+                st.caption(f"עדכון אחרון שנשמר: {_div_updated_at}")
+            st.caption("ℹ️ הטבלה היא למעקב בלבד. קבלת דיבידנד אינה משנה מזומן אוטומטית; הפקדה מתבצעת ידנית בסרגל הצד.")
 
         else:
             st.info("לא נמצאו נכסים מחלקי דיבידנד בתיק.")
@@ -2585,8 +2741,8 @@ with tab1:
         st.info("טיפ: וודא שהטיקרים נכונים ושיש חיבור לאינטרנט.")
 
 
-# ==================== TAB 3: שיעורים פרטיים ====================
-with tab3:
+# ==================== TAB 2: שיעורים פרטיים ====================
+with lessons_tab:
     st.title("📚 שיעורים פרטיים — מעקב הכנסות")
     st.caption("כל הנתונים נשמרים ב-Supabase. עריכה שומרת היסטוריה, והסרה מהתצוגה מתבצעת בארכיון שניתן לשחזר.")
 
