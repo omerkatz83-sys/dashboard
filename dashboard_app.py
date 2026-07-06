@@ -203,7 +203,10 @@ class LocalJSONDatabase:
 
     # --- Extra Cash ---
     def get_extra_cash(self):
-        return self._load(self._extra_cash_file, {"total_deposited_ils": 0.0, "deposits": []})
+        return self._load(
+            self._extra_cash_file,
+            {"total_deposited_usd": 0.0, "total_deposited_ils": 0.0, "deposits": []},
+        )
 
     def save_extra_cash(self, data):
         return self._save(self._extra_cash_file, data)
@@ -318,7 +321,10 @@ class SupabaseDatabase:
 
     # --- Extra Cash ---
     def get_extra_cash(self):
-        return self._get("extra_cash", {"total_deposited_ils": 0.0, "deposits": []})
+        return self._get(
+            "extra_cash",
+            {"total_deposited_usd": 0.0, "total_deposited_ils": 0.0, "deposits": []},
+        )
 
     def save_extra_cash(self, data):
         return self._set("extra_cash", data)
@@ -406,14 +412,69 @@ israeli_stocks = {
 }
 
 
+def _cash_number(value, default=0.0):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    return number if math.isfinite(number) else float(default)
+
+
 def _normalize_cash_state(raw_state):
     state = copy.deepcopy(raw_state) if isinstance(raw_state, dict) else {}
-    state.setdefault("total_deposited_ils", 0.0)
-    state.setdefault("deposits", [])
-    state.setdefault("sale_cash_usd", 0.0)
-    state.setdefault("sale_cash_ils", 0.0)
-    state.setdefault("purchase_deductions_usd", 0.0)
+    state["total_deposited_usd"] = _cash_number(state.get("total_deposited_usd"))
+    state["total_deposited_ils"] = _cash_number(state.get("total_deposited_ils"))
+    state["sale_cash_usd"] = _cash_number(state.get("sale_cash_usd"))
+    state["sale_cash_ils"] = _cash_number(state.get("sale_cash_ils"))
+    state["purchase_deductions_usd"] = _cash_number(state.get("purchase_deductions_usd"))
+    if not isinstance(state.get("deposits"), list):
+        state["deposits"] = []
     return state
+
+
+def _calculate_purchase_deductions_usd(purchase_records):
+    total = 0.0
+    for record in purchase_records or []:
+        if not _is_valid_purchase_record(record):
+            continue
+        if str(record.get('currency', 'USD')).upper() != 'USD':
+            continue
+        commission = max(_cash_number(record.get('commission_usd', TRADE_COMMISSION_USD)), 0.0)
+        total += _cash_number(record.get('qty')) * _cash_number(record.get('price')) + commission
+    return round(total, 2)
+
+
+def _prepare_usd_deposit(cash_state, amount_usd, deposit_id=None, deposited_at=None):
+    amount = _cash_number(amount_usd)
+    if amount <= 0:
+        raise ValueError("סכום ההפקדה חייב להיות גדול מאפס")
+    state = _normalize_cash_state(cash_state)
+    new_deposit_id = deposit_id or uuid.uuid4().hex
+    state["total_deposited_usd"] = round(state["total_deposited_usd"] + amount, 2)
+    state["deposits"].append({
+        "id": new_deposit_id,
+        "amount_usd": round(amount, 2),
+        "currency": "USD",
+        "date": deposited_at or datetime.now().isoformat(timespec='seconds'),
+    })
+    return state, new_deposit_id
+
+
+def _cash_balance_usd(base_cash_usd, cash_state, purchase_deductions_usd, usd_to_ils):
+    """Return one canonical USD cash balance, preserving legacy ILS cash values."""
+    state = _normalize_cash_state(cash_state)
+    fx_rate = _cash_number(usd_to_ils)
+    if fx_rate <= 0:
+        raise ValueError("שער USD/ILS חייב להיות גדול מאפס")
+    legacy_ils_cash = state["total_deposited_ils"] + state["sale_cash_ils"]
+    balance = (
+        _cash_number(base_cash_usd)
+        + state["total_deposited_usd"]
+        + state["sale_cash_usd"]
+        + (legacy_ils_cash / fx_rate)
+        - max(_cash_number(purchase_deductions_usd), 0.0)
+    )
+    return round(balance, 2)
 
 
 def _is_same_sale(existing_sale, sale_entry):
@@ -990,43 +1051,44 @@ with main_tab:
     
     # טעינת הפקדות מזומן מצטברות מקובץ
     _saved_deposits = _normalize_cash_state(db.get_extra_cash())
-    _total_deposited_ils = _saved_deposits.get("total_deposited_ils", 0.0)
-    _sale_cash_usd = _saved_deposits.get("sale_cash_usd", 0.0)
-    _sale_cash_ils = _saved_deposits.get("sale_cash_ils", 0.0)
+    _total_deposited_usd = _saved_deposits["total_deposited_usd"]
+    _total_deposited_ils = _saved_deposits["total_deposited_ils"]
     # חישוב דינמי — סך כל עלויות הרכישות שנרשמו + עמלות
-    _purchase_deductions_usd = round(sum(
-        float(_ps['qty']) * float(_ps['price'])
-        + float(_ps.get('commission_usd', TRADE_COMMISSION_USD))
-        for _ps in _purchased_stocks
-        if _ps.get('currency', 'USD') == 'USD'
-    ), 2)
+    _purchase_deductions_usd = _calculate_purchase_deductions_usd(_purchased_stocks)
     
-    extra_cash_ils = st.sidebar.number_input(
-        "💵 הפקדת מזומן חדשה (₪)",
-        min_value=0.0, value=0.0, step=100.0, format="%.0f",
-        help="הקלד סכום בשקלים ולחץ 'הפקד' — יומר לדולרים ויתווסף לצמיתות ליתרת המזומן"
+    _new_cash_deposit_usd = st.sidebar.number_input(
+        "💵 הפקדת מזומן חדשה ($)",
+        min_value=0.0, value=0.0, step=100.0, format="%.2f",
+        help="הקלד את סכום ההפקדה בדולרים. הסכום יישמר ויתווסף ישירות ליתרת המזומן הדולרית.",
     )
     
-    if st.sidebar.button("✅ הפקד", disabled=(extra_cash_ils <= 0)):
-        _deposit_state = copy.deepcopy(_saved_deposits)
-        _deposit_state["total_deposited_ils"] = _total_deposited_ils + extra_cash_ils
-        _deposit_state.setdefault("deposits", []).append({
-            "id": uuid.uuid4().hex,
-            "amount_ils": extra_cash_ils,
-            "date": datetime.now().isoformat(timespec='seconds'),
-        })
+    if st.sidebar.button("✅ הפקד דולרים", disabled=(_new_cash_deposit_usd <= 0)):
+        _deposit_state, _deposit_id = _prepare_usd_deposit(
+            _saved_deposits, _new_cash_deposit_usd
+        )
+        _expected_deposited_usd = _deposit_state["total_deposited_usd"]
         if db.save_extra_cash(_deposit_state):
-            _total_deposited_ils += extra_cash_ils
-            st.sidebar.success(f"✅ הופקדו ₪{extra_cash_ils:,.0f} בהצלחה!")
-            st.rerun()
+            _verified_cash_state = _normalize_cash_state(db.get_extra_cash())
+            _deposit_verified = (
+                abs(_verified_cash_state["total_deposited_usd"] - _expected_deposited_usd) < 0.005
+                and any(
+                    isinstance(item, dict) and item.get("id") == _deposit_id
+                    for item in _verified_cash_state["deposits"]
+                )
+            )
+            if _deposit_verified:
+                _saved_deposits = _verified_cash_state
+                _total_deposited_usd = _expected_deposited_usd
+                st.sidebar.success(f"✅ הופקדו ${_new_cash_deposit_usd:,.2f} ונשמרו בהצלחה.")
+            else:
+                st.sidebar.error("ההפקדה נשלחה אך לא אומתה. יש לרענן לפני ניסיון נוסף כדי למנוע הפקדה כפולה.")
         else:
             st.sidebar.error("ההפקדה לא נשמרה; יתרת המזומן לא שונתה.")
     
-    # הסכום הנוסף שמתווסף ל-CASH_USD בזמן ריצה
-    extra_cash_ils = _total_deposited_ils
-    
+    if _total_deposited_usd > 0:
+        st.sidebar.caption(f"💰 סה״כ הפקדות דולריות: ${_total_deposited_usd:,.2f}")
     if _total_deposited_ils > 0:
-        st.sidebar.caption(f"💰 סה״כ הופקד: ₪{_total_deposited_ils:,.0f}")
+        st.sidebar.caption(f"🗂️ הפקדות עבר בשקלים שנשמרו: ₪{_total_deposited_ils:,.2f}")
     
     st.sidebar.caption("מחירי קרנות ישראליות:")
     
@@ -1157,14 +1219,14 @@ with main_tab:
             price_ils = il_prices.get(ticker, info['default_price_ils'])
             qty = info['qty']
             
-            # הוספת מזומן נוסף מה-sidebar ומכירות שכבר נרשמו
-            if ticker == 'CASH_USD' and extra_cash_ils > 0:
-                extra_usd = extra_cash_ils / usd_to_ils
-                qty = qty + extra_usd
-            if ticker == 'CASH_USD' and _sale_cash_usd != 0:
-                qty = qty + _sale_cash_usd
-            if ticker == 'CASH_USD' and _purchase_deductions_usd != 0:
-                qty = qty - _purchase_deductions_usd
+            # יתרת המזומן מחושבת במקום אחד כדי שהפקדות, מכירות ורכישות יישארו עקביות.
+            if ticker == 'CASH_USD':
+                qty = _cash_balance_usd(
+                    base_cash_usd=qty,
+                    cash_state=_saved_deposits,
+                    purchase_deductions_usd=_purchase_deductions_usd,
+                    usd_to_ils=usd_to_ils,
+                )
             
             if info.get('currency') == 'USD':
                 price_usd = price_ils
@@ -1187,6 +1249,13 @@ with main_tab:
         if israeli_rows:
             israeli_df = pd.DataFrame(israeli_rows)
             df = pd.concat([df, israeli_df], ignore_index=True)
+
+        _cash_row = df[df['Ticker'] == 'CASH_USD']
+        if not _cash_row.empty:
+            _current_cash_usd = float(_cash_row.iloc[0]['Quantity'])
+            st.sidebar.caption(f"💵 יתרת מזומן נוכחית: ${_current_cash_usd:,.2f}")
+            if _current_cash_usd < -0.01:
+                st.sidebar.warning("יתרת המזומן שלילית. בדוק שהרכישות וההפקדות שנרשמו תואמות לחשבון.")
         
         total_value = df['Value'].sum()
         total_value_ils = df['Value ILS'].sum()
@@ -2604,10 +2673,13 @@ with main_tab:
                         'משקל בתיק %': 0
                     })
             
-            # מזומן (כולל תמורות מכירות ודולרים נוספים שנטענו)
-            cash_usd = israeli_stocks.get('CASH_USD', {}).get('qty', 0) + _sale_cash_usd
-            if _total_deposited_ils > 0:
-                cash_usd += _total_deposited_ils / usd_ils
+            # אותו חישוב מזומן קנוני שמשמש בטבלה הראשית.
+            cash_usd = _cash_balance_usd(
+                base_cash_usd=israeli_stocks.get('CASH_USD', {}).get('qty', 0),
+                cash_state=_saved_deposits,
+                purchase_deductions_usd=_purchase_deductions_usd,
+                usd_to_ils=usd_ils,
+            )
             total_cost_usd += cash_usd
             total_value_usd += cash_usd
             
