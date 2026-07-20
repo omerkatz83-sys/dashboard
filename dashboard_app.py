@@ -518,6 +518,39 @@ def _sale_is_reflected_in_base_position(sale_date, base_purchase_date):
     return str(sale_date or '')[:10] <= str(base_purchase_date)[:10]
 
 
+def _reduce_tracked_position_quantity(ticker, sold_qty):
+    """Apply a recorded partial/full sale to the currently tracked base position."""
+    ticker = normalize_market_ticker(ticker)
+    qty_to_reduce = _cash_number(sold_qty)
+    if qty_to_reduce <= 0:
+        return 0.0
+    remaining_sale_qty = qty_to_reduce
+    portfolio_state = globals().get('portfolio', {})
+    israeli_state = globals().get('israeli_stocks', {})
+    for position_group in (portfolio_state, israeli_state):
+        if ticker not in position_group:
+            continue
+        try:
+            current_qty = float(position_group[ticker].get('qty', 0))
+        except (TypeError, ValueError, AttributeError):
+            current_qty = 0.0
+        if current_qty <= 0:
+            del position_group[ticker]
+            continue
+        remaining_position_qty = round(current_qty - remaining_sale_qty, 8)
+        if remaining_position_qty > 0:
+            position_group[ticker]['qty'] = remaining_position_qty
+            remaining_sale_qty = 0.0
+            break
+        del position_group[ticker]
+        remaining_sale_qty = abs(remaining_position_qty)
+        if remaining_sale_qty <= 0.000001:
+            break
+    if ticker not in portfolio_state and ticker not in israeli_state:
+        globals().get('cost_basis', {}).pop(ticker, None)
+    return round(max(qty_to_reduce - remaining_sale_qty, 0.0), 8)
+
+
 def _is_valid_purchase_record(record):
     if not isinstance(record, dict) or not record.get('ticker') or record.get('archived_at'):
         return False
@@ -618,7 +651,14 @@ def _record_sale(
     else:
         cash_state['sale_cash_usd'] += _proceeds
 
-    if ticker in active_stops:
+    _current_position_qty = 0.0
+    for _position_group in (globals().get('portfolio', {}), globals().get('israeli_stocks', {})):
+        if ticker in _position_group:
+            try:
+                _current_position_qty += float(_position_group[ticker].get('qty', 0))
+            except (TypeError, ValueError, AttributeError):
+                pass
+    if ticker in active_stops and _current_position_qty - qty <= 0.000001:
         del active_stops[ticker]
 
     if not _save_state_bundle([
@@ -636,6 +676,7 @@ if not isinstance(_sold_stocks, list):
     _sold_stocks = []
 # קבץ לפי טיקר — שמור רק את תאריך המכירה האחרון לכל טיקר
 _latest_sale_date = {}
+_sold_qty_after_base = {}
 for _sold in _sold_stocks:
     if not isinstance(_sold, dict) or not _sold.get('ticker'):
         continue
@@ -643,21 +684,17 @@ for _sold in _sold_stocks:
     _sd = _sold.get('date', '')
     if _t not in _latest_sale_date or _sd > _latest_sale_date[_t]:
         _latest_sale_date[_t] = _sd
-for _t, _sale_date in _latest_sale_date.items():
-    # פוזיציות הבסיס מייצגות את היתרה הנוכחית לאחר עסקאות היסטוריות.
-    # לכן מכירה ישנה מאותו יום של תאריך העלות אינה סוגרת שוב את היתרה הנוכחית.
     _purchase_date_cb = cost_basis.get(_t, {}).get('date', '')
-    if _sale_is_reflected_in_base_position(_sale_date, _purchase_date_cb):
-        continue  # המכירה כבר מגולמת בפוזיציית הבסיס, או קדמה לה
-    # הסר מ-portfolio (US stocks)
-    if _t in portfolio:
-        del portfolio[_t]
-    # הסר מ-israeli_stocks
-    if _t in israeli_stocks:
-        del israeli_stocks[_t]
-    # הסר מ-cost_basis
-    if _t in cost_basis:
-        del cost_basis[_t]
+    if _sale_is_reflected_in_base_position(_sd, _purchase_date_cb):
+        continue
+    try:
+        _sq = float(_sold.get('qty', 0))
+    except (TypeError, ValueError):
+        _sq = 0.0
+    if _sq > 0:
+        _sold_qty_after_base[_t] = _sold_qty_after_base.get(_t, 0.0) + _sq
+for _t, _sold_qty in _sold_qty_after_base.items():
+    _reduce_tracked_position_quantity(_t, _sold_qty)
 
 # --- טעינת רכישות ידניות שנשמרו דרך הדשבורד ---
 _all_purchased_stocks = db.get_purchased_stocks() or []
