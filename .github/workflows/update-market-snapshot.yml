@@ -1,0 +1,31 @@
+name: Update market snapshot
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Keep Supabase warm with market quotes while the Streamlit app is asleep.
+    # UTC 06:00-22:00 covers Tel Aviv, London, and US regular trading hours.
+    - cron: "*/15 6-22 * * 1-5"
+
+jobs:
+  update-market-snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Refresh Supabase market snapshot
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python scripts/update_market_snapshot.py

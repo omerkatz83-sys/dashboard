@@ -12,6 +12,7 @@ import copy
 import requests
 from datetime import datetime, timedelta
 from supabase import create_client, Client
+from market_data import fetch_market_quote, normalize_snapshot_quotes, quote_has_daily_baseline
 
 TRADE_COMMISSION_USD = 4.90
 
@@ -150,6 +151,7 @@ class LocalJSONDatabase:
         self._baseline_file = os.path.join(_dir, "portfolio_baseline.json")
         self._purchased_stocks_file = os.path.join(_dir, "purchased_stocks.json")
         self._dividend_snapshot_file = os.path.join(_dir, "dividend_snapshot.json")
+        self._market_snapshot_file = os.path.join(_dir, "market_snapshot.json")
 
     def _load(self, path, default=None):
         try:
@@ -241,6 +243,13 @@ class LocalJSONDatabase:
 
     def save_dividend_snapshot(self, data):
         return self._save(self._dividend_snapshot_file, data)
+
+    # --- Market Snapshot ---
+    def get_market_snapshot(self):
+        return self._load(self._market_snapshot_file, {})
+
+    def save_market_snapshot(self, data):
+        return self._save(self._market_snapshot_file, data)
 
     # --- Received Dividends ---
     def get_received_dividends(self):
@@ -359,6 +368,13 @@ class SupabaseDatabase:
 
     def save_dividend_snapshot(self, data):
         return self._set("dividend_snapshot", data)
+
+    # --- Market Snapshot ---
+    def get_market_snapshot(self):
+        return self._get("market_snapshot", {})
+
+    def save_market_snapshot(self, data):
+        return self._set("market_snapshot", data)
 
     # --- Received Dividends ---
     def get_received_dividends(self):
@@ -931,6 +947,7 @@ def get_data(portfolio):
     portfolio_df = []
     history_dict = {}
     errors = []
+    snapshot_quotes = normalize_snapshot_quotes(db.get_market_snapshot())
     
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -957,25 +974,28 @@ def get_data(portfolio):
             
             history_dict[ticker] = hist
 
-            # מחיר נוכחי ו-Low intraday: שלוף נרות 5 דקות — מדויק יותר מנר יומי
-            try:
-                intraday = stock.history(period="1d", interval="5m")
-                if not intraday.empty:
-                    intraday_clean = intraday.dropna(subset=['Close'])
-                    if not intraday_clean.empty:
-                        price = float(intraday_clean['Close'].iloc[-1])
-                        # שמור את ה-DataFrame המלא לסינון לפי חותמת זמן בבדיקות סטופ
-                        history_dict[f"{ticker}__intraday"] = intraday_clean
-                    else:
-                        price = float(hist_clean['Close'].iloc[-1])
-                else:
-                    price = float(hist_clean['Close'].iloc[-1])
-            except Exception:
-                price = float(hist_clean['Close'].iloc[-1])
+            quote, intraday_clean = fetch_market_quote(ticker, stock=stock, history=hist_clean)
+            if intraday_clean is not None:
+                # שמור את ה-DataFrame המלא לסינון לפי חותמת זמן בבדיקות סטופ
+                history_dict[f"{ticker}__intraday"] = intraday_clean
 
-            prev_close = float(hist_clean['Close'].iloc[-1]) if len(hist_clean) > 0 else price
-            if len(hist_clean) > 1:
-                prev_close = float(hist_clean['Close'].iloc[-2])
+            snapshot_quote = snapshot_quotes.get(ticker, {})
+            if not quote_has_daily_baseline(quote) and quote_has_daily_baseline(snapshot_quote):
+                quote = {**snapshot_quote, "source": "supabase_market_snapshot"}
+
+            price = quote.get('price')
+            if price is None:
+                price = float(hist_clean['Close'].iloc[-1])
+            else:
+                price = float(price)
+
+            prev_close = quote.get('previous_close')
+            if prev_close is None:
+                prev_close = float(hist_clean['Close'].iloc[-1]) if len(hist_clean) > 0 else price
+                if len(hist_clean) > 1:
+                    prev_close = float(hist_clean['Close'].iloc[-2])
+            else:
+                prev_close = float(prev_close)
             
             # אם מניה נקנתה/הוגדלה היום — תקן את Prev Close בהתאם
             cb = cost_basis.get(ticker)
