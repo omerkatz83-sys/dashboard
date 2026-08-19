@@ -12,7 +12,12 @@ import copy
 import requests
 from datetime import datetime, timedelta
 from supabase import create_client, Client
-from market_data import fetch_market_quote, normalize_snapshot_quotes, quote_has_daily_baseline
+from market_data import (
+    fetch_market_quote,
+    normalize_snapshot_quotes,
+    quote_has_daily_baseline,
+    snapshot_quote_is_fresh,
+)
 
 TRADE_COMMISSION_USD = 4.90
 
@@ -980,7 +985,9 @@ def get_data(portfolio):
                 history_dict[f"{ticker}__intraday"] = intraday_clean
 
             snapshot_quote = snapshot_quotes.get(ticker, {})
-            if not quote_has_daily_baseline(quote) and quote_has_daily_baseline(snapshot_quote):
+            if snapshot_quote_is_fresh(snapshot_quote):
+                quote = {**snapshot_quote, "source": "supabase_market_snapshot"}
+            elif not quote_has_daily_baseline(quote) and quote_has_daily_baseline(snapshot_quote):
                 quote = {**snapshot_quote, "source": "supabase_market_snapshot"}
 
             price = quote.get('price')

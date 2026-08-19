@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 
 def finite_float(value, default=None):
@@ -130,6 +130,29 @@ def normalize_snapshot_quotes(snapshot):
         return {}
     quotes = snapshot.get("quotes")
     return quotes if isinstance(quotes, dict) else {}
+
+
+def parse_snapshot_time(value):
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def snapshot_quote_is_fresh(quote, max_age_minutes=45):
+    """Return True when a stored quote is recent enough to drive Daily P&L."""
+    if not quote_has_daily_baseline(quote):
+        return False
+    updated_at = parse_snapshot_time(quote.get("updated_at"))
+    if updated_at is None:
+        return False
+    return datetime.now(timezone.utc) - updated_at <= timedelta(minutes=max_age_minutes)
 
 
 def quote_has_daily_baseline(quote):
