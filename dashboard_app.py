@@ -453,6 +453,50 @@ def _normalize_cash_state(raw_state):
     return state
 
 
+def _average_monthly_usd_deposit(cash_state, today=None):
+    """Return average monthly USD deposits since the first saved USD deposit."""
+    state = _normalize_cash_state(cash_state)
+    deposit_rows = []
+    for deposit in state.get("deposits", []):
+        if not isinstance(deposit, dict):
+            continue
+        currency = str(deposit.get("currency", "")).upper()
+        amount = _cash_number(deposit.get("amount_usd" if currency == "USD" else "amount"))
+        if currency != "USD" or amount <= 0:
+            continue
+        date_text = str(deposit.get("date", "")).strip()
+        try:
+            deposit_date = datetime.fromisoformat(date_text.replace("Z", "+00:00")).date()
+        except ValueError:
+            continue
+        deposit_rows.append((deposit_date, amount))
+
+    if not deposit_rows:
+        total = state["total_deposited_usd"]
+        return {
+            "average": round(total, 2) if total > 0 else 0.0,
+            "total": round(total, 2),
+            "months": 1 if total > 0 else 0,
+        }
+
+    total = round(sum(amount for _, amount in deposit_rows), 2)
+    first_month = min(deposit_date for deposit_date, _ in deposit_rows)
+    end_date = today or datetime.now().date()
+    if isinstance(end_date, datetime):
+        end_date = end_date.date()
+    month_count = (
+        (end_date.year - first_month.year) * 12
+        + (end_date.month - first_month.month)
+        + 1
+    )
+    month_count = max(month_count, 1)
+    return {
+        "average": round(total / month_count, 2),
+        "total": total,
+        "months": month_count,
+    }
+
+
 def _calculate_purchase_deductions_usd(purchase_records):
     total = 0.0
     for record in purchase_records or []:
@@ -1151,6 +1195,15 @@ with main_tab:
     
     if _total_deposited_usd > 0:
         st.sidebar.caption(f"💰 סה״כ הפקדות דולריות: ${_total_deposited_usd:,.2f}")
+        _avg_deposit_stats = _average_monthly_usd_deposit(_saved_deposits)
+        st.sidebar.metric(
+            "📆 ממוצע הפקדות מזומן בחודש",
+            f"${_avg_deposit_stats['average']:,.2f}",
+            help=(
+                "מחושב מסך ההפקדות הדולריות השמורות, "
+                f"מהחודש הראשון עם הפקדה ועד היום ({_avg_deposit_stats['months']} חודשים)."
+            ),
+        )
     if _total_deposited_ils > 0:
         st.sidebar.caption(f"🗂️ הפקדות עבר בשקלים שנשמרו: ₪{_total_deposited_ils:,.2f}")
     
