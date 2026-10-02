@@ -3367,85 +3367,15 @@ with lessons_tab:
 
         st.divider()
 
-        # --- יעד הכנסה שנתית + טיפים כלכליים ---
-        _GOAL_ANNUAL = 30000
-        _goal_now = datetime.now()
-        st.subheader(f"🎯 יעד הכנסה לשנת {_goal_now.year} — ₪{_GOAL_ANNUAL:,.0f}")
-
-        # --- חישובים ---
-        # חודשים שנותרו בשנה הנוכחית
-        _months_left = 12 - _goal_now.month + 1  # כולל החודש הנוכחי
-        _income_this_year = _year_income
-        _remaining = max(_GOAL_ANNUAL - _income_this_year, 0)
-        _goal_pct = min(_income_this_year / _GOAL_ANNUAL * 100, 100)
-
-        # ממוצע נדרש לחודש כדי להגיע ליעד
-        _needed_per_month = _remaining / max(_months_left, 1)
-
-        # שיעורים נדרשים — לפי ממוצע הכנסה לשיעור
-        _goal_lessons = _year_lessons if _year_lessons else all_lessons
-        _avg_per_lesson = (
-            sum(l["total"] for l in _goal_lessons) / len(_goal_lessons)
-            if _goal_lessons else 0
-        )
-        _goal_timed_lessons = [l for l in _goal_lessons if l.get("duration", 0) > 0]
+        # נתוני קצב ומשך עבור הסימולציות הכלכליות
+        _analysis_lessons = _year_lessons if _year_lessons else all_lessons
+        _analysis_timed_lessons = [l for l in _analysis_lessons if l.get("duration", 0) > 0]
         _avg_duration = (
-            sum(l["duration"] for l in _goal_timed_lessons) / len(_goal_timed_lessons)
-            if _goal_timed_lessons else 1.0
+            sum(l["duration"] for l in _analysis_timed_lessons) / len(_analysis_timed_lessons)
+            if _analysis_timed_lessons else 1.0
         )
-        _lessons_per_month_needed = _needed_per_month / _avg_per_lesson if _avg_per_lesson > 0 else 0
-        _hours_per_month_needed = _lessons_per_month_needed * _avg_duration
-
-        # שיעורים לשבוע
-        _lessons_per_week_needed = _lessons_per_month_needed / 4.33
-
-        # קצב נוכחי (שיעורים בחודש)
         _current_lessons_per_month = len(_year_lessons) / _num_months
         _current_hours_per_month = _year_hours / _num_months
-
-        # כמה צריך להגדיל
-        _growth_needed = (
-            (_lessons_per_month_needed - _current_lessons_per_month)
-            / _current_lessons_per_month * 100
-            if _current_lessons_per_month > 0 else None
-        )
-
-        # --- Progress bar ---
-        st.markdown(f"**התקדמות {_goal_now.year}:** ₪{_income_this_year:,.0f} מתוך ₪{_GOAL_ANNUAL:,.0f}")
-        st.progress(min(_goal_pct / 100, 1.0))
-
-        # --- KPIs של היעד ---
-        gcol1, gcol2, gcol3, gcol4 = st.columns(4)
-        gcol1.metric("✅ הושג", f"₪{_income_this_year:,.0f}", delta=f"{_goal_pct:.0f}%")
-        gcol2.metric("🔴 חסר", f"₪{_remaining:,.0f}")
-        gcol3.metric("📅 נדרש/חודש", f"₪{_needed_per_month:,.0f}")
-        gcol4.metric("📆 חודשים נותרו", f"{_months_left}")
-
-        st.markdown("")
-
-        gcol5, gcol6, gcol7, gcol8 = st.columns(4)
-        gcol5.metric("📚 שיעורים נדרשים/חודש", f"{_lessons_per_month_needed:.1f}")
-        gcol6.metric("📅 שיעורים/שבוע", f"{_lessons_per_week_needed:.1f}")
-        gcol7.metric("⏱️ שעות נדרשות/חודש", f"{_hours_per_month_needed:.1f}")
-        gcol8.metric("📊 קצב נוכחי/חודש", f"{_current_lessons_per_month:.1f} שיעורים")
-
-        # --- סטטוס היעד ---
-        if _remaining <= 0:
-            st.success(f"🏆 מזל טוב! הגעת ליעד ה-₪{_GOAL_ANNUAL:,.0f} השנה! סה״כ: ₪{_income_this_year:,.0f}")
-        elif _avg_per_lesson <= 0:
-            st.warning("אין עדיין מספיק נתוני הכנסה לחישוב מספר השיעורים הנדרש ליעד.")
-        elif _current_lessons_per_month <= 0:
-            st.warning("עדיין לא נרשמו שיעורים השנה, ולכן אין מספיק נתונים לחישוב קצב התקדמות.")
-        elif _growth_needed is not None and _growth_needed <= 0:
-            st.success(f"✅ הקצב הנוכחי שלך ({_current_lessons_per_month:.1f} שיעורים/חודש) **מספיק** כדי להגיע ליעד! המשך ככה.")
-        elif _growth_needed is not None and _growth_needed <= 20:
-            st.info(f"👍 כמעט שם! צריך להגדיל ב-**{_growth_needed:.0f}%** — עוד {_lessons_per_month_needed - _current_lessons_per_month:.1f} שיעורים לחודש.")
-        elif _growth_needed is not None and _growth_needed <= 50:
-            st.warning(f"⚠️ צריך להגדיל את הקצב ב-**{_growth_needed:.0f}%** — מ-{_current_lessons_per_month:.1f} ל-{_lessons_per_month_needed:.1f} שיעורים/חודש.")
-        elif _growth_needed is not None:
-            st.error(f"🔴 פער גדול: צריך להגדיל ב-**{_growth_needed:.0f}%** — מ-{_current_lessons_per_month:.1f} ל-{_lessons_per_month_needed:.1f} שיעורים/חודש.")
-
-        st.divider()
 
         # --- טיפים כלכליים מבוססי נתונים ---
         st.subheader("💡 מסקנות וטיפים כלכליים")
@@ -3521,23 +3451,6 @@ with lessons_tab:
             tips.append(("info", f"👤 **תלמיד נוסף (שיעור/שבוע):** יוסיף כ-₪{_extra_student:,.0f}/שנה "
                          f"(בתעריף ₪{avg_per_hour:.0f}/שעה, {_avg_duration:.1f}ש׳ לשיעור)."))
 
-        # 7) יעד 30K — ספציפי
-        if yearly_projection < _GOAL_ANNUAL:
-            _gap_annual = _GOAL_ANNUAL - yearly_projection
-            _need_extra_hours = _gap_annual / avg_per_hour / 12 if avg_per_hour > 0 else None
-            _target_rate_text = (
-                f", או תעריף ממוצע של ₪{_GOAL_ANNUAL / (_current_hours_per_month * 12):,.0f}/שעה ללא שינוי בכמות"
-                if _current_hours_per_month > 0 else ""
-            )
-            if _need_extra_hours is not None:
-                tips.append(("warning", f"🎯 **ליעד ₪{_GOAL_ANNUAL:,.0f}:** חסרים ₪{_gap_annual:,.0f}/שנה (₪{_gap_annual/12:,.0f}/חודש). "
-                             f"נדרשות עוד **{_need_extra_hours:.1f} שעות/חודש** בקצב התעריף הנוכחי{_target_rate_text}."))
-            else:
-                tips.append(("warning", f"🎯 **ליעד ₪{_GOAL_ANNUAL:,.0f}:** חסרים ₪{_gap_annual:,.0f}/שנה. "
-                             "הוסף משך לשיעורים כדי לחשב את מספר השעות הנדרש."))
-        else:
-            tips.append(("success", f"🎯 **התחזית השנתית (₪{yearly_projection:,.0f}) עומדת ביעד ₪{_GOAL_ANNUAL:,.0f}!** אפשר לשאוף ל-₪40,000 😎"))
-
         # הצגת הטיפים
         for _tip_type, _tip_msg in tips:
             if _tip_type == "success":
@@ -3579,26 +3492,14 @@ with lessons_tab:
             _fc_projected_sum = _fc_df[_fc_df["סוג"] == "תחזית"]["סכום"].sum()
             _fc_total = _fc_actual_sum + _fc_projected_sum
 
-            _fc_kpi = st.columns(4)
+            _fc_kpi = st.columns(3)
             _fc_kpi[0].metric(f"✅ בפועל {_fc_year}", f"₪{_fc_actual_sum:,.0f}")
             _fc_kpi[1].metric("🔮 תחזית יתרת השנה", f"₪{_fc_projected_sum:,.0f}")
             _fc_kpi[2].metric(f"📊 סה״כ צפוי {_fc_year}", f"₪{_fc_total:,.0f}")
-            _fc_goal_delta = _fc_total - _GOAL_ANNUAL
-            _fc_kpi[3].metric(
-                f"🎯 מול יעד ₪{_GOAL_ANNUAL:,}",
-                f"{'✅ עומד ביעד' if _fc_goal_delta >= 0 else '❌ לא עומד'}",
-                delta=f"{_fc_goal_delta:+,.0f}₪"
-            )
-
             _fc_fig = px.bar(
                 _fc_df, x="חודש", y="סכום", color="סוג",
                 color_discrete_map={"בפועל": "#42a5f5", "תחזית": "#b0bec5"},
                 text_auto=True,
-            )
-            _fc_fig.add_hline(
-                y=_GOAL_ANNUAL / 12, line_dash="dash", line_color="#ef5350",
-                annotation_text=f"יעד חודשי ₪{_GOAL_ANNUAL/12:,.0f}",
-                annotation_position="top right"
             )
             _fc_fig.update_layout(
                 yaxis_title="₪", xaxis_title="", legend_title="", height=380,
@@ -3606,23 +3507,6 @@ with lessons_tab:
             )
             _fc_fig.update_traces(texttemplate="₪%{y:,.0f}", textposition="outside")
             st.plotly_chart(_fc_fig, use_container_width=True)
-
-            if _fc_total >= _GOAL_ANNUAL:
-                st.success(f"🏆 **תחזית {_fc_year}: ₪{_fc_total:,.0f}** — עומד ביעד ₪{_GOAL_ANNUAL:,}! כל הכבוד!")
-            else:
-                _fc_gap = _GOAL_ANNUAL - _fc_total
-                _fc_months_left = max(12 - _fc_now.month, 1)
-                _fc_extra_hours = _fc_gap / avg_per_hour / _fc_months_left if avg_per_hour > 0 else 0
-                if avg_per_hour > 0:
-                    st.warning(
-                        f"📊 **תחזית {_fc_year}: ₪{_fc_total:,.0f}** — חסרים ₪{_fc_gap:,.0f} ליעד. "
-                        f"בקצב התעריף הנוכחי נדרשות עוד **{_fc_extra_hours:.1f} שעות/חודש** עד סוף השנה."
-                    )
-                else:
-                    st.warning(
-                        f"📊 **תחזית {_fc_year}: ₪{_fc_total:,.0f}** — חסרים ₪{_fc_gap:,.0f} ליעד. "
-                        "יש להוסיף משך לשיעורים כדי לחשב כמה שעות נוספות נדרשות."
-                    )
 
         st.divider()
 
