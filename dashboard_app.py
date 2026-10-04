@@ -35,6 +35,8 @@ def normalize_market_ticker(ticker):
 
 LEGACY_LESSON_STUDENT_ALIASES = {
     "shachar_itay_adva": "itay_adva",
+    "itamar": "other",
+    "איתמר": "other",
 }
 
 
@@ -71,6 +73,9 @@ def normalize_lesson_record(record, source_index):
         rate = total / duration if duration > 0 else 0.0
 
     student = str(record.get("student") or "other").strip()
+    student_name = str(record.get("student_name") or "").strip()
+    if student in ("itamar", "איתמר") and not student_name:
+        student_name = "איתמר"
     student = LEGACY_LESSON_STUDENT_ALIASES.get(student, student)
     payment = record.get("payment", record.get("note", "לא ידוע"))
 
@@ -79,7 +84,7 @@ def normalize_lesson_record(record, source_index):
         "_archived": bool(record.get("archived_at")),
         "id": str(record.get("id") or ""),
         "student": student,
-        "student_name": str(record.get("student_name") or "").strip(),
+        "student_name": student_name,
         "date": lesson_date,
         "duration": duration,
         "price_per_hour": rate,
@@ -2948,7 +2953,7 @@ with lessons_tab:
         "ron":       {"name": "רון",          "emoji": "🧑‍🎓", "default_rate": 130},
         "shachar":   {"name": "שחר",          "emoji": "👩‍🎓", "default_rate": 150},
         "itay_adva": {"name": "איתי ואדווה", "emoji": "👫",  "default_rate": 120},
-        "itamar":    {"name": "איתמר",        "emoji": "🧑‍🎓", "default_rate": 150},
+        "gal":       {"name": "גל",           "emoji": "👩‍🎓", "default_rate": 150, "default_payment": "bit"},
         "other":     {"name": "אחר",           "emoji": "👤",  "default_rate": 0},
     }
 
@@ -3017,11 +3022,19 @@ with lessons_tab:
     # --- הוספת שיעור חדש ---
     st.subheader("➕ הוסף שיעור חדש")
 
+    def _reset_lesson_defaults():
+        _selected = st.session_state["lesson_student"]
+        _defaults = STUDENTS[_selected]
+        st.session_state["lesson_pph"] = float(_defaults["default_rate"])
+        st.session_state["lesson_payment"] = _defaults.get("default_payment", "bit")
+        st.session_state["lesson_mode"] = "💵 סכום קבוע" if _selected == "other" else "⏱️ שעות × מחיר"
+
     add_cols = st.columns(4)
     with add_cols[0]:
         student_options = {k: f"{v['emoji']} {v['name']}" for k, v in STUDENTS.items()}
         selected_student = st.selectbox("תלמיד", options=list(student_options.keys()),
-                                        format_func=lambda x: student_options[x], key="lesson_student")
+                                        format_func=lambda x: student_options[x], key="lesson_student",
+                                        on_change=_reset_lesson_defaults)
     with add_cols[1]:
         lesson_date = st.date_input("תאריך", value=datetime.now().date(), key="lesson_date",
                                      min_value=datetime(2000, 1, 1).date())
