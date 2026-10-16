@@ -2954,6 +2954,7 @@ with lessons_tab:
         "shachar":   {"name": "שחר",          "emoji": "👩‍🎓", "default_rate": 150},
         "itay_adva": {"name": "איתי ואדווה", "emoji": "👫",  "default_rate": 120},
         "gal":       {"name": "גל",           "emoji": "👩‍🎓", "default_rate": 150, "default_payment": "bit"},
+        "karni":     {"name": "קרני",         "emoji": "👩‍🎓", "default_rate": 150},
         "other":     {"name": "אחר",           "emoji": "👤",  "default_rate": 0},
     }
 
