@@ -6,6 +6,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from lessons_logic import student_profiles
 
 
 SOURCE = Path(__file__).resolve().parents[1] / "dashboard_app.py"
@@ -14,16 +15,21 @@ nodes = [
     node for node in ast.walk(module)
     if (
         isinstance(node, ast.Assign)
-        and any(isinstance(target, ast.Name) and target.id in {
-            "LEGACY_LESSON_STUDENT_ALIASES", "STUDENTS"
-        } for target in node.targets)
+        and any(isinstance(target, ast.Name) and target.id == "LEGACY_LESSON_STUDENT_ALIASES"
+                for target in node.targets)
     ) or (
         isinstance(node, ast.FunctionDef)
-        and node.name in {"_lesson_number", "normalize_lesson_record", "_reset_lesson_defaults"}
+        and node.name in {"_lesson_number", "normalize_lesson_record"}
     )
 ]
 namespace = {"math": math, "datetime": datetime, "st": SimpleNamespace(session_state={})}
 exec(compile(ast.Module(body=nodes, type_ignores=[]), str(SOURCE), "exec"), namespace)
+namespace["STUDENTS"] = student_profiles({"lessons": []}, [])
+namespace["PAYMENTS"] = {"bit": "ביט", "paybox": "פייבוקס", "מזומן": "מזומן"}
+ui_source = SOURCE.with_name("lessons_dashboard.py")
+reset = next(n for n in ast.parse(ui_source.read_text(encoding="utf-8")).body
+             if isinstance(n, ast.FunctionDef) and n.name == "_reset_add")
+exec(compile(ast.Module(body=[reset], type_ignores=[]), str(ui_source), "exec"), namespace)
 
 
 class PrivateLessonStudentsTests(unittest.TestCase):
@@ -62,19 +68,19 @@ class PrivateLessonStudentsTests(unittest.TestCase):
     def test_selecting_gal_resets_previous_rate_payment_and_mode(self):
         state = namespace["st"].session_state
         state.clear()
-        state.update(lesson_student="gal", lesson_pph=130.0,
-                     lesson_payment="paybox", lesson_mode="💵 סכום קבוע")
-        namespace["_reset_lesson_defaults"]()
+        state.update(test_student="gal", test_rate=130.0,
+                     test_payment="paybox", test_mode="סכום קבוע")
+        namespace["_reset_add"](namespace["STUDENTS"], "test_")
         self.assertEqual(namespace["STUDENTS"]["gal"]["name"], "גל")
-        self.assertEqual(state["lesson_pph"], 150.0)
-        self.assertEqual(state["lesson_payment"], "bit")
-        self.assertEqual(state["lesson_mode"], "⏱️ שעות × מחיר")
-        state["lesson_student"] = "other"
-        namespace["_reset_lesson_defaults"]()
-        self.assertEqual(state["lesson_mode"], "💵 סכום קבוע")
-        state["lesson_student"] = "gal"
-        namespace["_reset_lesson_defaults"]()
-        self.assertEqual(state["lesson_pph"], 150.0)
+        self.assertEqual(state["test_rate"], 150.0)
+        self.assertEqual(state["test_payment"], "bit")
+        self.assertEqual(state["test_mode"], "שעות × מחיר")
+        state["test_student"] = "other"
+        namespace["_reset_add"](namespace["STUDENTS"], "test_")
+        self.assertEqual(state["test_mode"], "סכום קבוע")
+        state["test_student"] = "gal"
+        namespace["_reset_add"](namespace["STUDENTS"], "test_")
+        self.assertEqual(state["test_rate"], 150.0)
 
 
 if __name__ == "__main__":
