@@ -654,6 +654,30 @@ def _save_state_bundle(steps):
     return True
 
 
+def _normalize_active_stop_orders(saved_stops, position_tickers):
+    """Normalize saved orders without recreating deliberately absent stops."""
+    if not isinstance(saved_stops, dict):
+        raise ValueError("נתוני הסטופים אינם תקינים; לא בוצע שינוי")
+    positions = {normalize_market_ticker(ticker) for ticker in position_tickers}
+    normalized = {}
+    for ticker, order in saved_stops.items():
+        key = normalize_market_ticker(ticker)
+        if key not in positions:
+            continue
+        if isinstance(order, (int, float)):
+            order = {"stop_price": float(order), "currency": "USD"}
+        if not isinstance(order, dict):
+            continue
+        try:
+            price = float(order.get("stop_price", 0))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(price) or price <= 0:
+            continue
+        normalized[key] = copy.deepcopy(order)
+    return normalized, normalized != saved_stops
+
+
 def _record_sale(
     db_obj, ticker, name, qty, sale_price, currency, sale_date,
     stop_price=None, reason='manual', fx_rate=None,
@@ -2007,7 +2031,7 @@ with main_tab:
             active_stops = db.get_stop_orders(copy.deepcopy(default_stop_orders)) or {}
             executed_history = db.get_executed_stops() or []
             if not isinstance(active_stops, dict):
-                active_stops = {}
+                raise RuntimeError("נתוני הסטופים אינם תקינים; בדיקת הסטופים הופסקה")
             if not isinstance(executed_history, list):
                 executed_history = []
 
@@ -2016,37 +2040,11 @@ with main_tab:
                 if info.get('type') != 'Cash'
             }
 
-            # נרמל פורמט וטיקרים, והסר סטופים שאין מאחוריהם פוזיציה פעילה.
-            _normalized_stops = {}
-            _sync_needed = False
-            for _sk, _sv in list(active_stops.items()):
-                _normalized_key = normalize_market_ticker(_sk)
-                if _normalized_key not in _active_position_tickers:
-                    _sync_needed = True
-                    continue
-                if isinstance(_sv, (int, float)):
-                    _sv = {"stop_price": float(_sv), "currency": "USD"}
-                    _sync_needed = True
-                if not isinstance(_sv, dict):
-                    _sync_needed = True
-                    continue
-                try:
-                    if float(_sv.get('stop_price', 0)) <= 0:
-                        _sync_needed = True
-                        continue
-                except (TypeError, ValueError):
-                    _sync_needed = True
-                    continue
-                _normalized_stops[_normalized_key] = copy.deepcopy(_sv)
-                if _normalized_key != _sk:
-                    _sync_needed = True
-            active_stops = _normalized_stops
-            
-            # סנכרן ברירות מחדל רק עבור פוזיציות שקיימות כרגע.
-            for _dk, _dv in default_stop_orders.items():
-                if _dk in _active_position_tickers and _dk not in active_stops:
-                    active_stops[_dk] = copy.deepcopy(_dv)
-                    _sync_needed = True
+            # הרשימה השמורה היא הקובעת, גם כשהיא ריקה. ברירות המחדל משמשות
+            # רק כשאין רשימה שמורה; אין לשחזר סטופים שבוטלו מתוך רכישות עבר.
+            active_stops, _sync_needed = _normalize_active_stop_orders(
+                active_stops, _active_position_tickers
+            )
 
             # מיגרציה: המר check_from_date ישן ל-check_from_ts (חותמת זמן UTC מלאה).
             # סטופים שעודכנו ידנית ואין להם check_from_ts יקבלו ts=עכשיו,
