@@ -182,7 +182,14 @@ class LocalJSONDatabase:
 
     # --- Stop Orders ---
     def get_stop_orders(self, default=None):
-        return self._load(self._stop_orders_file, default)
+        # A read failure must never reactivate cancelled orders via defaults.
+        if not os.path.exists(self._stop_orders_file):
+            return copy.deepcopy(default)
+        with open(self._stop_orders_file, 'r', encoding='utf-8') as stop_file:
+            orders = json.load(stop_file)
+        if not isinstance(orders, dict):
+            raise ValueError("נתוני הסטופים השמורים אינם תקינים")
+        return orders
 
     def save_stop_orders(self, data):
         return self._save(self._stop_orders_file, data)
@@ -307,7 +314,14 @@ class SupabaseDatabase:
 
     # --- Stop Orders ---
     def get_stop_orders(self, default=None):
-        return self._get("stop_orders", default)
+        # Defaults are for an absent row only, never for a failed network request.
+        response = self._client.table(self.TABLE).select("data").eq("id", "stop_orders").execute()
+        if not response.data:
+            return copy.deepcopy(default)
+        orders = response.data[0]["data"]
+        if not isinstance(orders, dict):
+            raise ValueError("נתוני הסטופים השמורים אינם תקינים")
+        return orders
 
     def save_stop_orders(self, data):
         return self._set("stop_orders", data)
