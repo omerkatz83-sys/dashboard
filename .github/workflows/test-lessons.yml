@@ -1,4 +1,4 @@
-name: Test private lessons
+name: Test dashboard
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
     paths:
       - dashboard_app.py
       - lessons_*.py
+      - investment_projection*.py
       - tests/**
       - requirements.txt
       - .github/workflows/test-lessons.yml
@@ -13,6 +14,7 @@ on:
     paths:
       - dashboard_app.py
       - lessons_*.py
+      - investment_projection*.py
       - tests/**
       - requirements.txt
       - .github/workflows/test-lessons.yml

@@ -1425,223 +1425,238 @@ with main_tab:
         total_invested = df.loc[_invested_mask, 'Value'].sum()
         total_invested_ils = df.loc[_invested_mask, 'Value ILS'].sum()
 
-        # מחשבון איזון מחדש
-        if new_deposit > 0:
-            new_total = total_value_ils + new_deposit
-            
-            st.sidebar.markdown("---")
-            st.sidebar.subheader("📊 תוצאות המחשבון")
-            st.sidebar.markdown(f"**שווי תיק נוכחי:** ₪{total_value_ils:,.0f}")
-            st.sidebar.markdown(f"**הפקדה חדשה:** ₪{new_deposit:,.0f}")
-            st.sidebar.markdown(f"**שווי לאחר הפקדה:** ₪{new_total:,.0f}")
-            st.sidebar.markdown("---")
-            
-            total_to_distribute = 0
-            alloc_details = []
-            
-            for k in target_alloc:
-                current_val = df[df['Type'] == k]['Value ILS'].sum()
-                current_pct = (current_val / total_value_ils * 100) if total_value_ils > 0 else 0
-                target_pct = target_alloc[k] * 100
-                target_val = target_alloc[k] * new_total
-                gap = max(target_val - current_val, 0)
-                total_to_distribute += gap
-                alloc_details.append({
-                    'key': k,
-                    'current_val': current_val,
-                    'current_pct': current_pct,
-                    'target_pct': target_pct,
-                    'gap': gap
-                })
-            
-            # נרמול: אם סכום הפערים גדול מההפקדה, נחלק פרופורציונלית
-            if total_to_distribute > 0:
-                scale = min(new_deposit / total_to_distribute, 1.0)
-            else:
-                scale = 0
-            
-            st.sidebar.markdown("**כך כדאי לפזר את ההפקדה:**")
-            for item in alloc_details:
-                k = item['key']
-                label = target_labels.get(k, k)
-                amount = item['gap'] * scale
-                pct_of_deposit = (amount / new_deposit * 100) if new_deposit > 0 else 0
-                
-                st.sidebar.markdown(
-                    f"{label}\n"
+        _portfolio_view, _projection_view = st.tabs(["📊 תיק ההשקעות", "🔮 מחשבון השקעות עתידי"])
+        with _projection_view:
+            from zoneinfo import ZoneInfo as _ProjectionZoneInfo
+            from investment_projection_ui import render_investment_projection
+
+            _projection_now = datetime.now(_ProjectionZoneInfo("Asia/Jerusalem"))
+            render_investment_projection(
+                current_value_usd=float(total_value),
+                invested_value_usd=float(total_invested),
+                monthly_stats=_average_monthly_usd_deposit(_saved_deposits, today=_projection_now.date()),
+                usd_to_ils=float(usd_to_ils),
+                as_of=_projection_now.strftime("%d.%m.%Y %H:%M"),
+            )
+
+        with _portfolio_view:
+            # מחשבון איזון מחדש
+            if new_deposit > 0:
+                new_total = total_value_ils + new_deposit
+
+                st.sidebar.markdown("---")
+                st.sidebar.subheader("📊 תוצאות המחשבון")
+                st.sidebar.markdown(f"**שווי תיק נוכחי:** ₪{total_value_ils:,.0f}")
+                st.sidebar.markdown(f"**הפקדה חדשה:** ₪{new_deposit:,.0f}")
+                st.sidebar.markdown(f"**שווי לאחר הפקדה:** ₪{new_total:,.0f}")
+                st.sidebar.markdown("---")
+
+                total_to_distribute = 0
+                alloc_details = []
+
+                for k in target_alloc:
+                    current_val = df[df['Type'] == k]['Value ILS'].sum()
+                    current_pct = (current_val / total_value_ils * 100) if total_value_ils > 0 else 0
+                    target_pct = target_alloc[k] * 100
+                    target_val = target_alloc[k] * new_total
+                    gap = max(target_val - current_val, 0)
+                    total_to_distribute += gap
+                    alloc_details.append({
+                        'key': k,
+                        'current_val': current_val,
+                        'current_pct': current_pct,
+                        'target_pct': target_pct,
+                        'gap': gap
+                    })
+
+                # נרמול: אם סכום הפערים גדול מההפקדה, נחלק פרופורציונלית
+                if total_to_distribute > 0:
+                    scale = min(new_deposit / total_to_distribute, 1.0)
+                else:
+                    scale = 0
+
+                st.sidebar.markdown("**כך כדאי לפזר את ההפקדה:**")
+                for item in alloc_details:
+                    k = item['key']
+                    label = target_labels.get(k, k)
+                    amount = item['gap'] * scale
+                    pct_of_deposit = (amount / new_deposit * 100) if new_deposit > 0 else 0
+
+                    st.sidebar.markdown(
+                        f"{label}\n"
                     f"- 👉 **הפקד: ₪{amount:,.0f}** ({pct_of_deposit:.0f}% מההפקדה)\n"
                     f"- מצב נוכחי: {item['current_pct']:.1f}% → יעד: {item['target_pct']:.0f}%"
+                    )
+
+                remaining = new_deposit - sum(item['gap'] * scale for item in alloc_details)
+                if remaining > 10:
+                    st.sidebar.success(f"✅ עודף של ₪{remaining:,.0f} - התיק כבר מאוזן היטב! הפקד לפי שיקול דעתך.")
+
+                st.sidebar.markdown("---")
+                st.sidebar.caption("💡 החישוב מתבסס על האסטרטגיה: 79% ליבה, 15% לוויין, 6% קריפטו. ההפקדה מתוכננת לקרב אותך ליעדים **בלי למכור** נכסים קיימים.")
+            df['Portfolio %'] = (df['Value'] / total_value * 100).round(2)
+
+            total_assets = len(portfolio) + len(israeli_stocks)
+            st.success(f"✅ נטענו {len(df)} נכסים בהצלחה מתוך {total_assets} | שער USD/ILS: ₪{usd_to_ils:.3f}")
+
+            if israeli_stocks:
+                _manual_count = sum(
+                    1 for _v in israeli_stocks.values()
+                    if not (_v.get('fund_id') or _v.get('funder_id'))
+                    and _v.get('currency') != 'USD'
+                    and not _v.get('yf_ticker')
                 )
-            
-            remaining = new_deposit - sum(item['gap'] * scale for item in alloc_details)
-            if remaining > 10:
-                st.sidebar.success(f"✅ עודף של ₪{remaining:,.0f} - התיק כבר מאוזן היטב! הפקד לפי שיקול דעתך.")
-            
-            st.sidebar.markdown("---")
-            st.sidebar.caption("💡 החישוב מתבסס על האסטרטגיה: 79% ליבה, 15% לוויין, 6% קריפטו. ההפקדה מתוכננת לקרב אותך ליעדים **בלי למכור** נכסים קיימים.")
-        df['Portfolio %'] = (df['Value'] / total_value * 100).round(2)
-        
-        total_assets = len(portfolio) + len(israeli_stocks)
-        st.success(f"✅ נטענו {len(df)} נכסים בהצלחה מתוך {total_assets} | שער USD/ILS: ₪{usd_to_ils:.3f}")
-        
-        if israeli_stocks:
-            _manual_count = sum(
-                1 for _v in israeli_stocks.values()
-                if not (_v.get('fund_id') or _v.get('funder_id'))
-                and _v.get('currency') != 'USD'
-                and not _v.get('yf_ticker')
-            )
-            if _manual_count > 0:
-                st.info(f"ℹ️ {_manual_count} נכסים ישראליים עם מחירים ידניים")
+                if _manual_count > 0:
+                    st.info(f"ℹ️ {_manual_count} נכסים ישראליים עם מחירים ידניים")
 
-        # Baseline tracking — מבוסס על שווי השקעות בלבד (ללא מזומן) כדי שהוספת מזומן לא תיראה כרווח
-        today = datetime.now().strftime('%Y-%m-%d')
-        
-        if db.baseline_exists():
-            baseline_data = db.get_baseline()
-            if not isinstance(baseline_data, dict):
-                baseline_data = {}
-            baseline_value = baseline_data.get('invested_value', baseline_data.get('value', total_invested))
-            baseline_date = baseline_data.get('date', today)
-        else:
-            baseline_value = total_invested
-            baseline_date = today
-            if not db.save_baseline({'invested_value': total_invested, 'date': baseline_date}):
-                st.warning("ערך הבסיס חושב אך לא נשמר; ההשוואה תחושב מחדש ברענון הבא.")
-        
-        if baseline_value > 0:
-            pct_change = ((total_invested - baseline_value) / baseline_value) * 100
-            ils_change = (total_invested_ils - baseline_value * usd_to_ils)
-        else:
-            pct_change = 0.0
-            ils_change = 0.0
+            # Baseline tracking — מבוסס על שווי השקעות בלבד (ללא מזומן) כדי שהוספת מזומן לא תיראה כרווח
+            today = datetime.now().strftime('%Y-%m-%d')
 
-        # KPIs
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("שווי תיק כולל ($)", f"${total_value:,.2f}")
-        col2.metric("שווי תיק כולל (₪)", f"₪{total_value_ils:,.2f}")
-        
-        # רווח כולל ($) — יחושב אחרי חישוב cost basis, כאן placeholder
-        _pnl_placeholder = col3.empty()
-        
-        col4.metric("מספר פוזיציות", len(df))
+            if db.baseline_exists():
+                baseline_data = db.get_baseline()
+                if not isinstance(baseline_data, dict):
+                    baseline_data = {}
+                baseline_value = baseline_data.get('invested_value', baseline_data.get('value', total_invested))
+                baseline_date = baseline_data.get('date', today)
+            else:
+                baseline_value = total_invested
+                baseline_date = today
+                if not db.save_baseline({'invested_value': total_invested, 'date': baseline_date}):
+                    st.warning("ערך הבסיס חושב אך לא נשמר; ההשוואה תחושב מחדש ברענון הבא.")
 
-        # ==================== NOTIFICATION HUB ====================
-        try:
-            alerts = []
+            if baseline_value > 0:
+                pct_change = ((total_invested - baseline_value) / baseline_value) * 100
+                ils_change = (total_invested_ils - baseline_value * usd_to_ils)
+            else:
+                pct_change = 0.0
+                ils_change = 0.0
 
-            # --- 1) פקודות סטופ קרובות להפעלה ---
-            _stops_for_banner = db.get_stop_orders(default_stop_orders.copy())
-            for _tk, _sv in list(_stops_for_banner.items()):
-                if isinstance(_sv, (int, float)):
-                    _stops_for_banner[_tk] = {"stop_price": _sv, "currency": "USD"}
-            for _tk, _si in _stops_for_banner.items():
-                _row = df[df['Ticker'] == _tk]
-                if _row.empty:
-                    # maybe Israeli
-                    if _tk in israeli_stocks and _tk not in ('CASH_USD', 'CASH_ILS'):
-                        _cur_p = il_prices.get(_tk, israeli_stocks[_tk]['default_price_ils'])
-                        _asset_cur = 'ILS'
+            # KPIs
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("שווי תיק כולל ($)", f"${total_value:,.2f}")
+            col2.metric("שווי תיק כולל (₪)", f"₪{total_value_ils:,.2f}")
+
+            # רווח כולל ($) — יחושב אחרי חישוב cost basis, כאן placeholder
+            _pnl_placeholder = col3.empty()
+
+            col4.metric("מספר פוזיציות", len(df))
+
+            # ==================== NOTIFICATION HUB ====================
+            try:
+                alerts = []
+
+                # --- 1) פקודות סטופ קרובות להפעלה ---
+                _stops_for_banner = db.get_stop_orders(default_stop_orders.copy())
+                for _tk, _sv in list(_stops_for_banner.items()):
+                    if isinstance(_sv, (int, float)):
+                        _stops_for_banner[_tk] = {"stop_price": _sv, "currency": "USD"}
+                for _tk, _si in _stops_for_banner.items():
+                    _row = df[df['Ticker'] == _tk]
+                    if _row.empty:
+                        # maybe Israeli
+                        if _tk in israeli_stocks and _tk not in ('CASH_USD', 'CASH_ILS'):
+                            _cur_p = il_prices.get(_tk, israeli_stocks[_tk]['default_price_ils'])
+                            _asset_cur = 'ILS'
+                        else:
+                            continue
                     else:
+                        _cur_p = float(_row.iloc[0]['Price'])
+                        _asset_cur = 'USD'
+                    _stop_cur = _si.get('currency', 'USD')
+                    if _stop_cur == _asset_cur:
+                        _cp = _cur_p
+                    elif _stop_cur == 'ILS' and _asset_cur == 'USD':
+                        _cp = _cur_p * usd_to_ils
+                    else:
+                        _cp = _cur_p / usd_to_ils
+                    _sp = _si['stop_price']
+                    if _cp > 0:
+                        _dist = ((_cp - _sp) / _cp) * 100
+                        # בדיקת ATR — מרחק < 2×ATR = קרוב
+                        _banner_atr = calc_atr(history_data.get(_tk)) if _tk in history_data else None
+                        _is_close = False
+                        if _banner_atr is not None and _banner_atr > 0:
+                            _b_atr = _banner_atr
+                            if _stop_cur == 'ILS' and _asset_cur == 'USD':
+                                _b_atr = _banner_atr * usd_to_ils
+                            elif _stop_cur == 'USD' and _asset_cur == 'ILS':
+                                _b_atr = _banner_atr / usd_to_ils
+                            _b_ratio = (_cp - _sp) / _b_atr if _b_atr > 0 else 99
+                            _is_close = _b_ratio < 2
+                        else:
+                            _is_close = _dist <= 5  # fallback אם אין ATR
+                        if _is_close:
+                            _sym = "₪" if _stop_cur == "ILS" else "$"
+                            alerts.append(f"⚠️ סטופ **{_tk}** קרוב ({_dist:.1f}%) — מחיר: {_sym}{_cp:,.2f} ↔ סטופ: {_sym}{_sp:,.2f}")
+
+                # --- 2) שיאי 52 שבועות ---
+                us_tickers = tuple(portfolio.keys())
+                notif_data = fetch_notification_data(us_tickers)
+                for _tk, _nd in notif_data.items():
+                    if not _nd:
                         continue
-                else:
-                    _cur_p = float(_row.iloc[0]['Price'])
-                    _asset_cur = 'USD'
-                _stop_cur = _si.get('currency', 'USD')
-                if _stop_cur == _asset_cur:
-                    _cp = _cur_p
-                elif _stop_cur == 'ILS' and _asset_cur == 'USD':
-                    _cp = _cur_p * usd_to_ils
-                else:
-                    _cp = _cur_p / usd_to_ils
-                _sp = _si['stop_price']
-                if _cp > 0:
-                    _dist = ((_cp - _sp) / _cp) * 100
-                    # בדיקת ATR — מרחק < 2×ATR = קרוב
-                    _banner_atr = calc_atr(history_data.get(_tk)) if _tk in history_data else None
-                    _is_close = False
-                    if _banner_atr is not None and _banner_atr > 0:
-                        _b_atr = _banner_atr
-                        if _stop_cur == 'ILS' and _asset_cur == 'USD':
-                            _b_atr = _banner_atr * usd_to_ils
-                        elif _stop_cur == 'USD' and _asset_cur == 'ILS':
-                            _b_atr = _banner_atr / usd_to_ils
-                        _b_ratio = (_cp - _sp) / _b_atr if _b_atr > 0 else 99
-                        _is_close = _b_ratio < 2
-                    else:
-                        _is_close = _dist <= 5  # fallback אם אין ATR
-                    if _is_close:
-                        _sym = "₪" if _stop_cur == "ILS" else "$"
-                        alerts.append(f"⚠️ סטופ **{_tk}** קרוב ({_dist:.1f}%) — מחיר: {_sym}{_cp:,.2f} ↔ סטופ: {_sym}{_sp:,.2f}")
-
-            # --- 2) שיאי 52 שבועות ---
-            us_tickers = tuple(portfolio.keys())
-            notif_data = fetch_notification_data(us_tickers)
-            for _tk, _nd in notif_data.items():
-                if not _nd:
-                    continue
-                _high = _nd.get('52w_high')
-                _row = df[df['Ticker'] == _tk]
-                if _high and not _row.empty:
-                    _cur_p = float(_row.iloc[0]['Price'])
-                    if _cur_p >= _high * 0.98:  # תוך 2% מהשיא
-                        _label = portfolio.get(_tk, {}).get('name', _tk)
-                        alerts.append(f"📈 **{_label}** הגיע לשיא 52 שבועות! (${_cur_p:,.2f} / ${_high:,.2f})")
-
-            # --- 3) חלוקת דיבידנד קרובה (ex-date בתוך 14 יום) ---
-            from datetime import timedelta
-            _now = datetime.now()
-            for _tk, _nd in notif_data.items():
-                if not _nd:
-                    continue
-                _exd = _nd.get('ex_div_date')
-                if _exd:
-                    try:
-                        _ex_dt = datetime.fromtimestamp(_exd)
-                        _days_left = (_ex_dt - _now).days
-                        if 0 <= _days_left <= 14:
+                    _high = _nd.get('52w_high')
+                    _row = df[df['Ticker'] == _tk]
+                    if _high and not _row.empty:
+                        _cur_p = float(_row.iloc[0]['Price'])
+                        if _cur_p >= _high * 0.98:  # תוך 2% מהשיא
                             _label = portfolio.get(_tk, {}).get('name', _tk)
-                            _div_rate = _nd.get('div_rate', 0)
-                            _date_str = _ex_dt.strftime('%d/%m')
-                            if _div_rate and _div_rate > 0:
-                                alerts.append(f"💰 דיבידנד **{_label}** ב-{_date_str} (${_div_rate:.2f}/מניה)")
-                            else:
-                                alerts.append(f"💰 דיבידנד צפוי ב-**{_label}** ב-{_date_str}")
-                    except:
-                        pass
+                            alerts.append(f"📈 **{_label}** הגיע לשיא 52 שבועות! (${_cur_p:,.2f} / ${_high:,.2f})")
 
-            # הצגת באנר
-            if alerts:
-                # בנה כרטיסיות HTML בודדות לכל התראה עם צבע לפי סוג
-                cards_html = ""
-                for a in alerts:
-                    if a.startswith("⚠️"):
-                        bg = "#2d1f00"
-                        border = "#ffb300"
-                        icon_color = "#ffb300"
-                    elif a.startswith("📈"):
-                        bg = "#002d1a"
-                        border = "#00e676"
-                        icon_color = "#00e676"
-                    elif a.startswith("💰"):
-                        bg = "#0d1f3c"
-                        border = "#42a5f5"
-                        icon_color = "#42a5f5"
-                    else:
-                        bg = "#1a1a2e"
-                        border = "#888"
-                        icon_color = "#ccc"
-                    cards_html += (
-                        f'<span style="display:inline-block; background:{bg}; '
+                # --- 3) חלוקת דיבידנד קרובה (ex-date בתוך 14 יום) ---
+                from datetime import timedelta
+                _now = datetime.now()
+                for _tk, _nd in notif_data.items():
+                    if not _nd:
+                        continue
+                    _exd = _nd.get('ex_div_date')
+                    if _exd:
+                        try:
+                            _ex_dt = datetime.fromtimestamp(_exd)
+                            _days_left = (_ex_dt - _now).days
+                            if 0 <= _days_left <= 14:
+                                _label = portfolio.get(_tk, {}).get('name', _tk)
+                                _div_rate = _nd.get('div_rate', 0)
+                                _date_str = _ex_dt.strftime('%d/%m')
+                                if _div_rate and _div_rate > 0:
+                                    alerts.append(f"💰 דיבידנד **{_label}** ב-{_date_str} (${_div_rate:.2f}/מניה)")
+                                else:
+                                    alerts.append(f"💰 דיבידנד צפוי ב-**{_label}** ב-{_date_str}")
+                        except:
+                            pass
+
+                # הצגת באנר
+                if alerts:
+                    # בנה כרטיסיות HTML בודדות לכל התראה עם צבע לפי סוג
+                    cards_html = ""
+                    for a in alerts:
+                        if a.startswith("⚠️"):
+                            bg = "#2d1f00"
+                            border = "#ffb300"
+                            icon_color = "#ffb300"
+                        elif a.startswith("📈"):
+                            bg = "#002d1a"
+                            border = "#00e676"
+                            icon_color = "#00e676"
+                        elif a.startswith("💰"):
+                            bg = "#0d1f3c"
+                            border = "#42a5f5"
+                            icon_color = "#42a5f5"
+                        else:
+                            bg = "#1a1a2e"
+                            border = "#888"
+                            icon_color = "#ccc"
+                        cards_html += (
+                            f'<span style="display:inline-block; background:{bg}; '
                         f'border:1px solid {border}; border-radius:8px; '
                         f'padding:8px 18px; margin:0 12px; white-space:nowrap; '
                         f'font-size:14px; color:#f0f0f0; direction:rtl;">{a}</span>'
-                    )
+                        )
 
-                # הכפל את הכרטיסיות כדי שהגלילה תהיה חלקה ואינסופית
-                doubled = cards_html + cards_html
+                    # הכפל את הכרטיסיות כדי שהגלילה תהיה חלקה ואינסופית
+                    doubled = cards_html + cards_html
 
-                st.markdown(f"""
+                    st.markdown(f"""
                 <style>
                 @keyframes marquee-scroll {{
                     0%   {{ transform: translateX(0%); }}
@@ -1695,618 +1710,470 @@ with main_tab:
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-        except Exception:
-            pass  # לא נכשיל את הדשבורד בגלל ההתראות
+            except Exception:
+                pass  # לא נכשיל את הדשבורד בגלל ההתראות
 
-        st.divider()
+            st.divider()
 
-        # ויזואליזציות
-        df_grouped = df.groupby(['Name', 'Type'], as_index=False).agg({
-            'Value': 'sum',
-            'Value ILS': 'sum',
-            'Quantity': 'sum'
-        })
-        
-        st.subheader("⚖️ הקצאת נכסים (Asset Allocation)")
-        fig_alloc = px.sunburst(df_grouped, path=['Type', 'Name'], values='Value', 
-                                color='Type', title="חשיפה לפי אסטרטגיה")
-        st.plotly_chart(fig_alloc, width='stretch')
+            # ויזואליזציות
+            df_grouped = df.groupby(['Name', 'Type'], as_index=False).agg({
+                'Value': 'sum',
+                'Value ILS': 'sum',
+                'Quantity': 'sum'
+            })
 
-        st.subheader("🏆 שווי אחזקות נוכחי")
-        fig_bar = px.bar(df_grouped.sort_values('Value', ascending=False), 
-                         x='Name', y='Value', color='Type', text_auto='.2s')
-        st.plotly_chart(fig_bar, width='stretch')
+            st.subheader("⚖️ הקצאת נכסים (Asset Allocation)")
+            fig_alloc = px.sunburst(df_grouped, path=['Type', 'Name'], values='Value',
+                                    color='Type', title="חשיפה לפי אסטרטגיה")
+            st.plotly_chart(fig_alloc, width='stretch')
 
-        # --- הוספת מחיר רכישה ורווח/הפסד ---
-        def _get_cost_basis_usd(ticker):
-            """מחזיר מחיר רכישה בדולרים"""
-            cb = cost_basis.get(ticker)
-            if cb is None:
-                return None
-            if cb['currency'] == 'ILS':
-                return cb['price'] / usd_to_ils
-            return cb['price']
-        
-        df['Cost Basis'] = df['Ticker'].apply(lambda t: _get_cost_basis_usd(t))
-        df['P&L %'] = df.apply(
-            lambda row: ((row['Price'] - row['Cost Basis']) / row['Cost Basis'] * 100)
-            if row['Cost Basis'] and row['Cost Basis'] > 0 else None, axis=1
-        )
-        df['P&L $'] = df.apply(
-            lambda row: (row['Price'] - row['Cost Basis']) * row['Quantity']
-            if row['Cost Basis'] and row['Cost Basis'] > 0 else None, axis=1
-        )
-        
-        total_pnl = df['P&L $'].sum()
-        total_cost = df.apply(
-            lambda row: row['Cost Basis'] * row['Quantity'] if row['Cost Basis'] and row['Cost Basis'] > 0 else 0, axis=1
-        ).sum()
-        total_pnl_pct = (total_pnl / total_cost * 100) if total_cost > 0 else 0
-        
-        # מילוי הרווח הכולל בראש הדף
-        _pnl_placeholder.metric(
-            "רווח כולל",
-            f"${total_pnl:+,.2f} ({total_pnl_pct:+.2f}%)",
-            delta=f"{total_pnl_pct:+.2f}%"
-        )
-        
-        # --- רווח/הפסד יומי (Daily P&L) — ללא מזומן ---
-        # prev close → current price, מתאפס כל יום אחרי סוף מסחר
-        df['Daily Chg $'] = df.apply(
-            lambda row: (row['Price'] - row['Prev Close']) * row['Quantity']
-            if row['Type'] != 'Cash' and pd.notna(row.get('Prev Close')) and row['Prev Close'] > 0 else 0.0, axis=1
-        )
-        df['Daily Chg %'] = df.apply(
-            lambda row: ((row['Price'] - row['Prev Close']) / row['Prev Close'] * 100)
-            if row['Type'] != 'Cash' and pd.notna(row.get('Prev Close')) and row['Prev Close'] > 0 and row['Prev Close'] != row['Price'] else 0.0, axis=1
-        )
-        
-        total_daily_pnl = df.loc[_invested_mask, 'Daily Chg $'].sum()
-        total_daily_pnl_ils = total_daily_pnl * usd_to_ils
-        # אחוז יומי כולל: שינוי ביחס לשווי השקעות אתמול (ללא מזומן)
-        prev_total = df.loc[_invested_mask].apply(lambda row: row['Prev Close'] * row['Quantity'] if pd.notna(row.get('Prev Close')) and row['Prev Close'] > 0 else row['Value'], axis=1).sum()
-        total_daily_pct = ((total_invested - prev_total) / prev_total * 100) if prev_total > 0 else 0.0
+            st.subheader("🏆 שווי אחזקות נוכחי")
+            fig_bar = px.bar(df_grouped.sort_values('Value', ascending=False),
+                             x='Name', y='Value', color='Type', text_auto='.2s')
+            st.plotly_chart(fig_bar, width='stretch')
 
-        # --- סקציית רווח/הפסד יומי בולטת ---
-        _daily_color = "🟢" if total_daily_pnl >= 0 else "🔴"
-        _daily_arrow = "▲" if total_daily_pnl >= 0 else "▼"
-        
-        st.subheader(f"📅 רווח/הפסד יומי {_daily_arrow}")
-        
-        dc1, dc2, dc3 = st.columns(3)
-        dc1.metric(
-            f"{_daily_color} שינוי יומי ($)",
-            f"${total_daily_pnl:+,.2f}",
-            delta=f"{total_daily_pct:+.2f}%"
-        )
-        dc2.metric(
-            f"{_daily_color} שינוי יומי (₪)",
-            f"₪{total_daily_pnl_ils:+,.2f}",
-            delta=f"{total_daily_pct:+.2f}%"
-        )
-        dc3.metric("📊 שווי השקעות אתמול", f"${prev_total:,.2f}")
-        
-        # טבלת שינוי יומי לכל מניה — רק מניות עם שינוי (לא מזומן/ישראליות בלי נתון)
-        daily_df = df[df['Daily Chg $'].abs() > 0.005].sort_values('Daily Chg $', ascending=True).copy()
-        if not daily_df.empty:
-            daily_display = daily_df[['Name', 'Ticker', 'Prev Close', 'Price', 'Quantity', 'Daily Chg %', 'Daily Chg $']].copy()
-            daily_display.columns = ['שם', 'טיקר', 'סגירה אתמול ($)', 'מחיר נוכחי ($)', 'כמות', 'שינוי %', 'שינוי $']
-            st.dataframe(
-                daily_display.style.format({
-                    'סגירה אתמול ($)': '${:.2f}',
-                    'מחיר נוכחי ($)': '${:.2f}',
-                    'כמות': '{:.2f}',
-                    'שינוי %': '{:+.2f}%',
-                    'שינוי $': '${:+,.2f}',
-                }).map(
-                    lambda v: 'color: #00c853' if isinstance(v, (int, float)) and v > 0 else ('color: #ff1744' if isinstance(v, (int, float)) and v < 0 else ''),
-                    subset=['שינוי %', 'שינוי $']
-                ),
-                hide_index=True,
-                use_container_width=True
+            # --- הוספת מחיר רכישה ורווח/הפסד ---
+            def _get_cost_basis_usd(ticker):
+                """מחזיר מחיר רכישה בדולרים"""
+                cb = cost_basis.get(ticker)
+                if cb is None:
+                    return None
+                if cb['currency'] == 'ILS':
+                    return cb['price'] / usd_to_ils
+                return cb['price']
+
+            df['Cost Basis'] = df['Ticker'].apply(lambda t: _get_cost_basis_usd(t))
+            df['P&L %'] = df.apply(
+                lambda row: ((row['Price'] - row['Cost Basis']) / row['Cost Basis'] * 100)
+                if row['Cost Basis'] and row['Cost Basis'] > 0 else None, axis=1
             )
-        else:
-            st.info("אין שינויים יומיים (השוק סגור או שאין נתוני מסחר)")
-        
-        st.divider()
-        
-        st.subheader("📋 פירוט נכסים")
-        
-        # KPI של רווח/הפסד כולל
-        pnl_col1, pnl_col2, pnl_col3 = st.columns(3)
-        pnl_col1.metric("💰 עלות רכישה כוללת", f"${total_cost:,.2f}")
-        pnl_col2.metric("📈 רווח/הפסד כולל ($)", f"${total_pnl:,.2f}", delta=f"{total_pnl_pct:+.2f}%")
-        pnl_col3.metric("📈 רווח/הפסד כולל (₪)", f"₪{total_pnl * usd_to_ils:,.2f}")
-        
-        df_display = df.sort_values('Value', ascending=False)
-        # הסתר עמודות עזר מהטבלה הראשית
-        _hide_cols = ['Prev Close']
-        _show_cols = [c for c in df_display.columns if c not in _hide_cols]
-        st.dataframe(df_display[_show_cols].style.format({
-            "Price": "${:.2f}", 
-            "Value": "${:.2f}",
-            "Value ILS": "₪{:.2f}",
-            "Portfolio %": "{:.2f}%",
-            "Cost Basis": "${:.2f}",
-            "P&L %": "{:+.2f}%",
-            "P&L $": "${:+,.2f}",
-            "Daily Chg %": "{:+.2f}%",
-            "Daily Chg $": "${:+,.2f}",
-        }).map(
-            lambda v: 'color: #00c853' if isinstance(v, (int, float)) and v > 0 else ('color: #ff1744' if isinstance(v, (int, float)) and v < 0 else ''),
-            subset=['P&L %', 'P&L $', 'Daily Chg %', 'Daily Chg $']
-        ))
-        
-        st.subheader("📊 התפלגות לפי סוג נכס")
-        type_summary = df.groupby('Type')['Value'].sum().sort_values(ascending=False)
-        type_pct = (type_summary / total_value * 100).round(2)
-        
-        for asset_type in type_summary.index:
-            type_value = type_summary[asset_type]
-            type_percent = type_pct[asset_type]
-            type_stocks = df[df['Type'] == asset_type].sort_values('Value', ascending=False)
-            
-            with st.expander(f"**{asset_type}** - ${type_value:,.2f} ({type_percent:.2f}% מהתיק)", expanded=False):
-                st.write(f"**סה\"כ {len(type_stocks)} נכסים בקטגוריה זו**")
-                
-                type_display = type_stocks[['Name', 'Quantity', 'Price', 'Value', 'Portfolio %']].copy()
-                type_display['% מהקטגוריה'] = (type_stocks['Value'] / type_value * 100).round(2)
-                
-                st.dataframe(type_display.style.format({
-                    "Price": "${:.2f}",
-                    "Value": "${:,.2f}",
-                    "Portfolio %": "{:.2f}%",
-                    "% מהקטגוריה": "{:.2f}%"
-                }), width='stretch')
-                
-                fig_pie = px.pie(type_stocks, values='Value', names='Name', 
-                                title=f'התפלגות בתוך {asset_type}')
-                st.plotly_chart(fig_pie, width='stretch')
+            df['P&L $'] = df.apply(
+                lambda row: (row['Price'] - row['Cost Basis']) * row['Quantity']
+                if row['Cost Basis'] and row['Cost Basis'] > 0 else None, axis=1
+            )
 
-        # ==================== רכישת מניה ====================
-        st.divider()
-        st.subheader("📥 רכישת מניה")
+            total_pnl = df['P&L $'].sum()
+            total_cost = df.apply(
+                lambda row: row['Cost Basis'] * row['Quantity'] if row['Cost Basis'] and row['Cost Basis'] > 0 else 0, axis=1
+            ).sum()
+            total_pnl_pct = (total_pnl / total_cost * 100) if total_cost > 0 else 0
 
-        from datetime import date as _date_cls
-        _purchase_records = db.get_purchased_stocks() or []
-        if not isinstance(_purchase_records, list):
-            _purchase_records = []
-        _all_purchases = [p for p in _purchase_records if _is_valid_purchase_record(p)]
+            # מילוי הרווח הכולל בראש הדף
+            _pnl_placeholder.metric(
+                "רווח כולל",
+                f"${total_pnl:+,.2f} ({total_pnl_pct:+.2f}%)",
+                delta=f"{total_pnl_pct:+.2f}%"
+            )
 
-        _buy_cols1 = st.columns([2, 2, 1])
-        with _buy_cols1[0]:
-            _buy_ticker = normalize_market_ticker(
-                st.text_input(
-                    "טיקר (Ticker)",
-                    placeholder="לדוגמה: AAPL (CNDX מזוהה אוטומטית כ-CNDX.L)",
-                    key="buy_ticker",
+            # --- רווח/הפסד יומי (Daily P&L) — ללא מזומן ---
+            # prev close → current price, מתאפס כל יום אחרי סוף מסחר
+            df['Daily Chg $'] = df.apply(
+                lambda row: (row['Price'] - row['Prev Close']) * row['Quantity']
+                if row['Type'] != 'Cash' and pd.notna(row.get('Prev Close')) and row['Prev Close'] > 0 else 0.0, axis=1
+            )
+            df['Daily Chg %'] = df.apply(
+                lambda row: ((row['Price'] - row['Prev Close']) / row['Prev Close'] * 100)
+                if row['Type'] != 'Cash' and pd.notna(row.get('Prev Close')) and row['Prev Close'] > 0 and row['Prev Close'] != row['Price'] else 0.0, axis=1
+            )
+
+            total_daily_pnl = df.loc[_invested_mask, 'Daily Chg $'].sum()
+            total_daily_pnl_ils = total_daily_pnl * usd_to_ils
+            # אחוז יומי כולל: שינוי ביחס לשווי השקעות אתמול (ללא מזומן)
+            prev_total = df.loc[_invested_mask].apply(lambda row: row['Prev Close'] * row['Quantity'] if pd.notna(row.get('Prev Close')) and row['Prev Close'] > 0 else row['Value'], axis=1).sum()
+            total_daily_pct = ((total_invested - prev_total) / prev_total * 100) if prev_total > 0 else 0.0
+
+            # --- סקציית רווח/הפסד יומי בולטת ---
+            _daily_color = "🟢" if total_daily_pnl >= 0 else "🔴"
+            _daily_arrow = "▲" if total_daily_pnl >= 0 else "▼"
+
+            st.subheader(f"📅 רווח/הפסד יומי {_daily_arrow}")
+
+            dc1, dc2, dc3 = st.columns(3)
+            dc1.metric(
+                f"{_daily_color} שינוי יומי ($)",
+                f"${total_daily_pnl:+,.2f}",
+                delta=f"{total_daily_pct:+.2f}%"
+            )
+            dc2.metric(
+                f"{_daily_color} שינוי יומי (₪)",
+                f"₪{total_daily_pnl_ils:+,.2f}",
+                delta=f"{total_daily_pct:+.2f}%"
+            )
+            dc3.metric("📊 שווי השקעות אתמול", f"${prev_total:,.2f}")
+
+            # טבלת שינוי יומי לכל מניה — רק מניות עם שינוי (לא מזומן/ישראליות בלי נתון)
+            daily_df = df[df['Daily Chg $'].abs() > 0.005].sort_values('Daily Chg $', ascending=True).copy()
+            if not daily_df.empty:
+                daily_display = daily_df[['Name', 'Ticker', 'Prev Close', 'Price', 'Quantity', 'Daily Chg %', 'Daily Chg $']].copy()
+                daily_display.columns = ['שם', 'טיקר', 'סגירה אתמול ($)', 'מחיר נוכחי ($)', 'כמות', 'שינוי %', 'שינוי $']
+                st.dataframe(
+                    daily_display.style.format({
+                        'סגירה אתמול ($)': '${:.2f}',
+                        'מחיר נוכחי ($)': '${:.2f}',
+                        'כמות': '{:.2f}',
+                        'שינוי %': '{:+.2f}%',
+                        'שינוי $': '${:+,.2f}',
+                    }).map(
+                        lambda v: 'color: #00c853' if isinstance(v, (int, float)) and v > 0 else ('color: #ff1744' if isinstance(v, (int, float)) and v < 0 else ''),
+                        subset=['שינוי %', 'שינוי $']
+                    ),
+                    hide_index=True,
+                    use_container_width=True
                 )
-            )
-        with _buy_cols1[1]:
-            _buy_name = st.text_input("שם (אופציונלי)", placeholder="לדוגמה: Apple Inc.", key="buy_name").strip()
-        with _buy_cols1[2]:
-            _buy_type = st.selectbox("סוג", ["Satellite", "Core", "Crypto"], key="buy_type")
-
-        _buy_cols2 = st.columns([2, 2, 2])
-        with _buy_cols2[0]:
-            _buy_qty = st.number_input("כמות מניות", min_value=0.0001, value=1.0, step=1.0, format="%.4f", key="buy_qty")
-        with _buy_cols2[1]:
-            _buy_price = st.number_input("מחיר רכישה ($)", min_value=0.001, value=100.0, step=0.01, format="%.3f", key="buy_price")
-        with _buy_cols2[2]:
-            _buy_date = st.date_input("תאריך רכישה", value=_date_cls.today(), key="buy_date")
-
-        _buy_cols3 = st.columns([2, 2, 2])
-        with _buy_cols3[0]:
-            _buy_stop = st.number_input(
-                "סטופ לוס ($) — אופציונלי", min_value=0.0, value=0.0, step=0.01, format="%.2f",
-                key="buy_stop", help="השאר 0 אם אינך רוצה לקבוע סטופ"
-            )
-        with _buy_cols3[1]:
-            _buy_total_cost = _buy_qty * _buy_price + TRADE_COMMISSION_USD
-            st.metric("עלות כוללת + עמלה ($)", f"${_buy_total_cost:,.2f}")
-        with _buy_cols3[2]:
-            st.markdown("<br>", unsafe_allow_html=True)
-            _buy_submit = st.button(
-                "✅ שמור רכישה", key="buy_submit_btn", use_container_width=True,
-                disabled=not bool(_buy_ticker)
-            )
-
-        if _buy_submit:
-            if not _buy_ticker:
-                st.error("חובה להזין טיקר.")
-            elif _buy_qty <= 0:
-                st.error("כמות חייבת להיות גדולה מ-0.")
-            elif _buy_price <= 0:
-                st.error("מחיר חייב להיות גדול מ-0.")
             else:
-                _buy_name_final = _buy_name if _buy_name else _buy_ticker
-                _buy_date_str = _buy_date.isoformat()
-                _new_purchase = {
-                    'id': uuid.uuid4().hex,
-                    'ticker': _buy_ticker,
-                    'name': _buy_name_final,
-                    'type': _buy_type,
-                    'qty': round(float(_buy_qty), 4),
-                    'price': round(float(_buy_price), 4),
-                    'currency': 'USD',
-                    'date': _buy_date_str,
-                    'stop_price': round(float(_buy_stop), 2) if _buy_stop > 0 else None,
-                    'stop_currency': 'USD',
-                    'commission_usd': TRADE_COMMISSION_USD,
-                    'registered_at': datetime.now().isoformat(timespec='seconds'),
-                }
-                _existing_purchases = db.get_purchased_stocks() or []
-                if not isinstance(_existing_purchases, list):
-                    _existing_purchases = []
-                _updated_purchases = list(_existing_purchases) + [_new_purchase]
-                _purchase_save_steps = [
-                    (db.save_purchased_stocks, _updated_purchases, _existing_purchases),
-                ]
-                # אם הוגדר סטופ — שמור אותו באותה פעולת מצב; כשל מחזיר את הרכישה לאחור.
-                if _buy_stop > 0:
-                    _old_stops_buy = db.get_stop_orders(default_stop_orders.copy()) or {}
-                    _active_stops_buy = copy.deepcopy(_old_stops_buy)
-                    _active_stops_buy[_buy_ticker] = {
-                        'stop_price': round(float(_buy_stop), 2),
-                        'currency': 'USD',
-                        'check_from_ts': datetime.utcnow().isoformat(),
-                    }
-                    _purchase_save_steps.append(
-                        (db.save_stop_orders, _active_stops_buy, _old_stops_buy)
+                st.info("אין שינויים יומיים (השוק סגור או שאין נתוני מסחר)")
+
+            st.divider()
+
+            st.subheader("📋 פירוט נכסים")
+
+            # KPI של רווח/הפסד כולל
+            pnl_col1, pnl_col2, pnl_col3 = st.columns(3)
+            pnl_col1.metric("💰 עלות רכישה כוללת", f"${total_cost:,.2f}")
+            pnl_col2.metric("📈 רווח/הפסד כולל ($)", f"${total_pnl:,.2f}", delta=f"{total_pnl_pct:+.2f}%")
+            pnl_col3.metric("📈 רווח/הפסד כולל (₪)", f"₪{total_pnl * usd_to_ils:,.2f}")
+
+            df_display = df.sort_values('Value', ascending=False)
+            # הסתר עמודות עזר מהטבלה הראשית
+            _hide_cols = ['Prev Close']
+            _show_cols = [c for c in df_display.columns if c not in _hide_cols]
+            st.dataframe(df_display[_show_cols].style.format({
+                "Price": "${:.2f}",
+                "Value": "${:.2f}",
+                "Value ILS": "₪{:.2f}",
+                "Portfolio %": "{:.2f}%",
+                "Cost Basis": "${:.2f}",
+                "P&L %": "{:+.2f}%",
+                "P&L $": "${:+,.2f}",
+                "Daily Chg %": "{:+.2f}%",
+                "Daily Chg $": "${:+,.2f}",
+            }).map(
+                lambda v: 'color: #00c853' if isinstance(v, (int, float)) and v > 0 else ('color: #ff1744' if isinstance(v, (int, float)) and v < 0 else ''),
+                subset=['P&L %', 'P&L $', 'Daily Chg %', 'Daily Chg $']
+            ))
+
+            st.subheader("📊 התפלגות לפי סוג נכס")
+            type_summary = df.groupby('Type')['Value'].sum().sort_values(ascending=False)
+            type_pct = (type_summary / total_value * 100).round(2)
+
+            for asset_type in type_summary.index:
+                type_value = type_summary[asset_type]
+                type_percent = type_pct[asset_type]
+                type_stocks = df[df['Type'] == asset_type].sort_values('Value', ascending=False)
+
+                with st.expander(f"**{asset_type}** - ${type_value:,.2f} ({type_percent:.2f}% מהתיק)", expanded=False):
+                    st.write(f"**סה\"כ {len(type_stocks)} נכסים בקטגוריה זו**")
+
+                    type_display = type_stocks[['Name', 'Quantity', 'Price', 'Value', 'Portfolio %']].copy()
+                    type_display['% מהקטגוריה'] = (type_stocks['Value'] / type_value * 100).round(2)
+
+                    st.dataframe(type_display.style.format({
+                        "Price": "${:.2f}",
+                        "Value": "${:,.2f}",
+                        "Portfolio %": "{:.2f}%",
+                        "% מהקטגוריה": "{:.2f}%"
+                    }), width='stretch')
+
+                    fig_pie = px.pie(type_stocks, values='Value', names='Name',
+                                    title=f'התפלגות בתוך {asset_type}')
+                    st.plotly_chart(fig_pie, width='stretch')
+
+            # ==================== רכישת מניה ====================
+            st.divider()
+            st.subheader("📥 רכישת מניה")
+
+            from datetime import date as _date_cls
+            _purchase_records = db.get_purchased_stocks() or []
+            if not isinstance(_purchase_records, list):
+                _purchase_records = []
+            _all_purchases = [p for p in _purchase_records if _is_valid_purchase_record(p)]
+
+            _buy_cols1 = st.columns([2, 2, 1])
+            with _buy_cols1[0]:
+                _buy_ticker = normalize_market_ticker(
+                    st.text_input(
+                        "טיקר (Ticker)",
+                        placeholder="לדוגמה: AAPL (CNDX מזוהה אוטומטית כ-CNDX.L)",
+                        key="buy_ticker",
                     )
-                if _save_state_bundle(_purchase_save_steps):
-                    st.success(
-                        f"✅ נרשמה רכישה של **{_buy_ticker}** ({_buy_name_final}) — "
+                )
+            with _buy_cols1[1]:
+                _buy_name = st.text_input("שם (אופציונלי)", placeholder="לדוגמה: Apple Inc.", key="buy_name").strip()
+            with _buy_cols1[2]:
+                _buy_type = st.selectbox("סוג", ["Satellite", "Core", "Crypto"], key="buy_type")
+
+            _buy_cols2 = st.columns([2, 2, 2])
+            with _buy_cols2[0]:
+                _buy_qty = st.number_input("כמות מניות", min_value=0.0001, value=1.0, step=1.0, format="%.4f", key="buy_qty")
+            with _buy_cols2[1]:
+                _buy_price = st.number_input("מחיר רכישה ($)", min_value=0.001, value=100.0, step=0.01, format="%.3f", key="buy_price")
+            with _buy_cols2[2]:
+                _buy_date = st.date_input("תאריך רכישה", value=_date_cls.today(), key="buy_date")
+
+            _buy_cols3 = st.columns([2, 2, 2])
+            with _buy_cols3[0]:
+                _buy_stop = st.number_input(
+                    "סטופ לוס ($) — אופציונלי", min_value=0.0, value=0.0, step=0.01, format="%.2f",
+                    key="buy_stop", help="השאר 0 אם אינך רוצה לקבוע סטופ"
+                )
+            with _buy_cols3[1]:
+                _buy_total_cost = _buy_qty * _buy_price + TRADE_COMMISSION_USD
+                st.metric("עלות כוללת + עמלה ($)", f"${_buy_total_cost:,.2f}")
+            with _buy_cols3[2]:
+                st.markdown("<br>", unsafe_allow_html=True)
+                _buy_submit = st.button(
+                    "✅ שמור רכישה", key="buy_submit_btn", use_container_width=True,
+                    disabled=not bool(_buy_ticker)
+                )
+
+            if _buy_submit:
+                if not _buy_ticker:
+                    st.error("חובה להזין טיקר.")
+                elif _buy_qty <= 0:
+                    st.error("כמות חייבת להיות גדולה מ-0.")
+                elif _buy_price <= 0:
+                    st.error("מחיר חייב להיות גדול מ-0.")
+                else:
+                    _buy_name_final = _buy_name if _buy_name else _buy_ticker
+                    _buy_date_str = _buy_date.isoformat()
+                    _new_purchase = {
+                        'id': uuid.uuid4().hex,
+                        'ticker': _buy_ticker,
+                        'name': _buy_name_final,
+                        'type': _buy_type,
+                        'qty': round(float(_buy_qty), 4),
+                        'price': round(float(_buy_price), 4),
+                        'currency': 'USD',
+                        'date': _buy_date_str,
+                        'stop_price': round(float(_buy_stop), 2) if _buy_stop > 0 else None,
+                        'stop_currency': 'USD',
+                        'commission_usd': TRADE_COMMISSION_USD,
+                        'registered_at': datetime.now().isoformat(timespec='seconds'),
+                    }
+                    _existing_purchases = db.get_purchased_stocks() or []
+                    if not isinstance(_existing_purchases, list):
+                        _existing_purchases = []
+                    _updated_purchases = list(_existing_purchases) + [_new_purchase]
+                    _purchase_save_steps = [
+                        (db.save_purchased_stocks, _updated_purchases, _existing_purchases),
+                    ]
+                    # אם הוגדר סטופ — שמור אותו באותה פעולת מצב; כשל מחזיר את הרכישה לאחור.
+                    if _buy_stop > 0:
+                        _old_stops_buy = db.get_stop_orders(default_stop_orders.copy()) or {}
+                        _active_stops_buy = copy.deepcopy(_old_stops_buy)
+                        _active_stops_buy[_buy_ticker] = {
+                            'stop_price': round(float(_buy_stop), 2),
+                            'currency': 'USD',
+                            'check_from_ts': datetime.utcnow().isoformat(),
+                        }
+                        _purchase_save_steps.append(
+                            (db.save_stop_orders, _active_stops_buy, _old_stops_buy)
+                        )
+                    if _save_state_bundle(_purchase_save_steps):
+                        st.success(
+                            f"✅ נרשמה רכישה של **{_buy_ticker}** ({_buy_name_final}) — "
                         f"{_buy_qty:.4g} יח' × ${_buy_price:,.3f} = ${_buy_qty * _buy_price:,.2f}"
                         f" + עמלה ${TRADE_COMMISSION_USD:.2f}."
-                        + (f" סטופ לוס: ${_buy_stop:,.2f}" if _buy_stop > 0 else "")
-                    )
-                    st.rerun()
-                else:
-                    st.error("שמירת הרכישה נכשלה; מצב הרכישות והסטופים הוחזר לאחור.")
-
-        # טבלת רכישות שנרשמו
-        if _all_purchases:
-            with st.expander(f"📋 רכישות שנרשמו ({len(_all_purchases)})", expanded=True):
-                _purch_rows = []
-                for _p in reversed(_all_purchases):
-                    _p_stop = f"${_p['stop_price']:,.2f}" if _p.get('stop_price') else "—"
-                    _purch_rows.append({
-                        'תאריך': _p.get('date', '—'),
-                        'טיקר': _p['ticker'],
-                        'שם': _p['name'],
-                        'סוג': _p.get('type', '—'),
-                        'כמות': _p['qty'],
-                        'מחיר ($)': _p['price'],
-                        'סטופ לוס': _p_stop,
-                    })
-                st.dataframe(pd.DataFrame(_purch_rows), hide_index=True, use_container_width=True)
-
-                st.markdown("**ביטול רכישה שגויה (העברה לארכיון):**")
-                _del_purch_opts = [
-                    f"{_p['ticker']} | {_p.get('date','—')} | {_p['qty']} יח' @ ${_p['price']}"
-                    for _p in _all_purchases
-                ]
-                _del_col1, _del_col2 = st.columns([4, 1])
-                with _del_col1:
-                    _del_purch_sel = st.selectbox("בחר רכישה למחיקה", _del_purch_opts, key="del_purch_sel")
-                with _del_col2:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    _selected_purchase = _all_purchases[_del_purch_opts.index(_del_purch_sel)]
-                    _selected_purchase_ts = _record_timestamp(
-                        _selected_purchase.get('date'), _selected_purchase.get('registered_at')
-                    )
-                    _linked_sale = any(
-                        normalize_market_ticker(s.get('ticker')) == normalize_market_ticker(_selected_purchase.get('ticker'))
-                        and _record_timestamp(s.get('date')) >= _selected_purchase_ts
-                        for s in _sold_stocks if isinstance(s, dict)
-                    )
-                    if st.button(
-                        "🗄️ ארכיון",
-                        key="del_purch_btn",
-                        use_container_width=True,
-                        disabled=_linked_sale,
-                    ):
-                        _del_idx = _del_purch_opts.index(_del_purch_sel)
-                        _selected_id = _all_purchases[_del_idx].get('id')
-                        _source_idx = next(
-                            (
-                                idx for idx, item in enumerate(_purchase_records)
-                                if (_selected_id and item.get('id') == _selected_id)
-                                or (not _selected_id and item is _all_purchases[_del_idx])
-                            ),
-                            None,
+                            + (f" סטופ לוס: ${_buy_stop:,.2f}" if _buy_stop > 0 else "")
                         )
-                        if _source_idx is None:
-                            st.error("לא ניתן לזהות את רשומת המקור; לא בוצע שינוי.")
-                        else:
-                            _archived_purchase = dict(_purchase_records[_source_idx])
-                            _archived_purchase['id'] = _archived_purchase.get('id') or uuid.uuid4().hex
-                            _archived_purchase['archived_at'] = datetime.now().isoformat(timespec='seconds')
-                            _updated_purchase_records = list(_purchase_records)
-                            _updated_purchase_records[_source_idx] = _archived_purchase
-                            if db.save_purchased_stocks(_updated_purchase_records):
-                                st.success(
-                                    f"הרכישה {_archived_purchase['ticker']} {_archived_purchase.get('date','')} "
-                                    "הועברה לארכיון ולא תיכלל בתיק או במזומן."
-                                )
-                                st.rerun()
+                        st.rerun()
+                    else:
+                        st.error("שמירת הרכישה נכשלה; מצב הרכישות והסטופים הוחזר לאחור.")
+
+            # טבלת רכישות שנרשמו
+            if _all_purchases:
+                with st.expander(f"📋 רכישות שנרשמו ({len(_all_purchases)})", expanded=True):
+                    _purch_rows = []
+                    for _p in reversed(_all_purchases):
+                        _p_stop = f"${_p['stop_price']:,.2f}" if _p.get('stop_price') else "—"
+                        _purch_rows.append({
+                            'תאריך': _p.get('date', '—'),
+                            'טיקר': _p['ticker'],
+                            'שם': _p['name'],
+                            'סוג': _p.get('type', '—'),
+                            'כמות': _p['qty'],
+                            'מחיר ($)': _p['price'],
+                            'סטופ לוס': _p_stop,
+                        })
+                    st.dataframe(pd.DataFrame(_purch_rows), hide_index=True, use_container_width=True)
+
+                    st.markdown("**ביטול רכישה שגויה (העברה לארכיון):**")
+                    _del_purch_opts = [
+                        f"{_p['ticker']} | {_p.get('date','—')} | {_p['qty']} יח' @ ${_p['price']}"
+                        for _p in _all_purchases
+                    ]
+                    _del_col1, _del_col2 = st.columns([4, 1])
+                    with _del_col1:
+                        _del_purch_sel = st.selectbox("בחר רכישה למחיקה", _del_purch_opts, key="del_purch_sel")
+                    with _del_col2:
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        _selected_purchase = _all_purchases[_del_purch_opts.index(_del_purch_sel)]
+                        _selected_purchase_ts = _record_timestamp(
+                            _selected_purchase.get('date'), _selected_purchase.get('registered_at')
+                        )
+                        _linked_sale = any(
+                            normalize_market_ticker(s.get('ticker')) == normalize_market_ticker(_selected_purchase.get('ticker'))
+                            and _record_timestamp(s.get('date')) >= _selected_purchase_ts
+                            for s in _sold_stocks if isinstance(s, dict)
+                        )
+                        if st.button(
+                            "🗄️ ארכיון",
+                            key="del_purch_btn",
+                            use_container_width=True,
+                            disabled=_linked_sale,
+                        ):
+                            _del_idx = _del_purch_opts.index(_del_purch_sel)
+                            _selected_id = _all_purchases[_del_idx].get('id')
+                            _source_idx = next(
+                                (
+                                    idx for idx, item in enumerate(_purchase_records)
+                                    if (_selected_id and item.get('id') == _selected_id)
+                                    or (not _selected_id and item is _all_purchases[_del_idx])
+                                ),
+                                None,
+                            )
+                            if _source_idx is None:
+                                st.error("לא ניתן לזהות את רשומת המקור; לא בוצע שינוי.")
                             else:
-                                st.error("העברת הרכישה לארכיון נכשלה; הנתונים לא שונו.")
-                    if _linked_sale:
-                        st.caption("לא ניתן לבטל רכישה שמקושרת למכירה מאוחרת יותר.")
+                                _archived_purchase = dict(_purchase_records[_source_idx])
+                                _archived_purchase['id'] = _archived_purchase.get('id') or uuid.uuid4().hex
+                                _archived_purchase['archived_at'] = datetime.now().isoformat(timespec='seconds')
+                                _updated_purchase_records = list(_purchase_records)
+                                _updated_purchase_records[_source_idx] = _archived_purchase
+                                if db.save_purchased_stocks(_updated_purchase_records):
+                                    st.success(
+                                        f"הרכישה {_archived_purchase['ticker']} {_archived_purchase.get('date','')} "
+                                    "הועברה לארכיון ולא תיכלל בתיק או במזומן."
+                                    )
+                                    st.rerun()
+                                else:
+                                    st.error("העברת הרכישה לארכיון נכשלה; הנתונים לא שונו.")
+                        if _linked_sale:
+                            st.caption("לא ניתן לבטל רכישה שמקושרת למכירה מאוחרת יותר.")
 
-        # ==================== STOP MARKET ORDERS ====================
-        try:
-            st.divider()
-            st.subheader("🛑 פקודות Stop Market")
-            
-            # טען פקודות סטופ פעילות וביצועים קודמים
-            active_stops = db.get_stop_orders(copy.deepcopy(default_stop_orders)) or {}
-            executed_history = db.get_executed_stops() or []
-            if not isinstance(active_stops, dict):
-                raise RuntimeError("נתוני הסטופים אינם תקינים; בדיקת הסטופים הופסקה")
-            if not isinstance(executed_history, list):
-                executed_history = []
+            # ==================== STOP MARKET ORDERS ====================
+            try:
+                st.divider()
+                st.subheader("🛑 פקודות Stop Market")
 
-            _active_position_tickers = set(portfolio) | {
-                ticker for ticker, info in israeli_stocks.items()
-                if info.get('type') != 'Cash'
-            }
+                # טען פקודות סטופ פעילות וביצועים קודמים
+                active_stops = db.get_stop_orders(copy.deepcopy(default_stop_orders)) or {}
+                executed_history = db.get_executed_stops() or []
+                if not isinstance(active_stops, dict):
+                    raise RuntimeError("נתוני הסטופים אינם תקינים; בדיקת הסטופים הופסקה")
+                if not isinstance(executed_history, list):
+                    executed_history = []
 
-            # הרשימה השמורה היא הקובעת, גם כשהיא ריקה. ברירות המחדל משמשות
-            # רק כשאין רשימה שמורה; אין לשחזר סטופים שבוטלו מתוך רכישות עבר.
-            active_stops, _sync_needed = _normalize_active_stop_orders(
-                active_stops, _active_position_tickers
-            )
+                _active_position_tickers = set(portfolio) | {
+                    ticker for ticker, info in israeli_stocks.items()
+                    if info.get('type') != 'Cash'
+                }
 
-            # מיגרציה: המר check_from_date ישן ל-check_from_ts (חותמת זמן UTC מלאה).
-            # סטופים שעודכנו ידנית ואין להם check_from_ts יקבלו ts=עכשיו,
-            # כך שרק נרות מרגע זה ואילך יבדקו ל-Low.
-            _retrofit_needed = False
-            _now_utc_str = datetime.utcnow().isoformat()
-            for _tk, _sv in list(active_stops.items()):
-                if not isinstance(_sv, dict):
-                    continue
-                # הסר שדות ישנים של גרסאות קודמות
-                _had_old = 'check_from_date' in _sv or 'low_check_from_date' in _sv
-                _sv.pop('check_from_date', None)
-                _sv.pop('low_check_from_date', None)
-                if _had_old:
-                    _retrofit_needed = True
-                # אם הסטופ שונה מברירת המחדל ואין לו check_from_ts — צור אחד עכשיו
-                if _tk in default_stop_orders and not _sv.get('check_from_ts'):
-                    _def_sp = default_stop_orders[_tk].get('stop_price')
-                    _cur_sp = _sv.get('stop_price')
-                    if _def_sp is not None and _cur_sp is not None and float(_cur_sp) != float(_def_sp):
-                        active_stops[_tk]['check_from_ts'] = _now_utc_str
+                # הרשימה השמורה היא הקובעת, גם כשהיא ריקה. ברירות המחדל משמשות
+                # רק כשאין רשימה שמורה; אין לשחזר סטופים שבוטלו מתוך רכישות עבר.
+                active_stops, _sync_needed = _normalize_active_stop_orders(
+                    active_stops, _active_position_tickers
+                )
+
+                # מיגרציה: המר check_from_date ישן ל-check_from_ts (חותמת זמן UTC מלאה).
+                # סטופים שעודכנו ידנית ואין להם check_from_ts יקבלו ts=עכשיו,
+                # כך שרק נרות מרגע זה ואילך יבדקו ל-Low.
+                _retrofit_needed = False
+                _now_utc_str = datetime.utcnow().isoformat()
+                for _tk, _sv in list(active_stops.items()):
+                    if not isinstance(_sv, dict):
+                        continue
+                    # הסר שדות ישנים של גרסאות קודמות
+                    _had_old = 'check_from_date' in _sv or 'low_check_from_date' in _sv
+                    _sv.pop('check_from_date', None)
+                    _sv.pop('low_check_from_date', None)
+                    if _had_old:
                         _retrofit_needed = True
-            
-            # אם אין קובץ — שמור את ברירות המחדל
-            if not db.stop_orders_file_exists() or _sync_needed or _retrofit_needed:
-                if not db.save_stop_orders(active_stops):
-                    raise RuntimeError("עדכון רשימת הסטופים לא נשמר; בדיקת הסטופים הופסקה")
-            
-            # בנה מיפוי של כל הנכסים (US + ישראליים) עם מחירים נוכחיים
-            all_assets = {}
-            for ticker_s, info_s in portfolio.items():
-                row = df[df['Ticker'] == ticker_s]
-                if not row.empty:
+                    # אם הסטופ שונה מברירת המחדל ואין לו check_from_ts — צור אחד עכשיו
+                    if _tk in default_stop_orders and not _sv.get('check_from_ts'):
+                        _def_sp = default_stop_orders[_tk].get('stop_price')
+                        _cur_sp = _sv.get('stop_price')
+                        if _def_sp is not None and _cur_sp is not None and float(_cur_sp) != float(_def_sp):
+                            active_stops[_tk]['check_from_ts'] = _now_utc_str
+                            _retrofit_needed = True
+
+                # אם אין קובץ — שמור את ברירות המחדל
+                if not db.stop_orders_file_exists() or _sync_needed or _retrofit_needed:
+                    if not db.save_stop_orders(active_stops):
+                        raise RuntimeError("עדכון רשימת הסטופים לא נשמר; בדיקת הסטופים הופסקה")
+
+                # בנה מיפוי של כל הנכסים (US + ישראליים) עם מחירים נוכחיים
+                all_assets = {}
+                for ticker_s, info_s in portfolio.items():
+                    row = df[df['Ticker'] == ticker_s]
+                    if not row.empty:
+                        all_assets[ticker_s] = {
+                            'name': info_s['name'],
+                            'qty': float(info_s['qty']),
+                            'current_price': float(row.iloc[0]['Price']),
+                            'currency': 'USD'
+                        }
+                for ticker_s, info_s in israeli_stocks.items():
+                    if ticker_s in ('CASH_USD', 'CASH_ILS'):
+                        continue
+                    price_ils = il_prices.get(ticker_s, info_s['default_price_ils'])
                     all_assets[ticker_s] = {
                         'name': info_s['name'],
                         'qty': float(info_s['qty']),
-                        'current_price': float(row.iloc[0]['Price']),
-                        'currency': 'USD'
+                        'current_price': float(price_ils),
+                        'currency': 'ILS'
                     }
-            for ticker_s, info_s in israeli_stocks.items():
-                if ticker_s in ('CASH_USD', 'CASH_ILS'):
-                    continue
-                price_ils = il_prices.get(ticker_s, info_s['default_price_ils'])
-                all_assets[ticker_s] = {
-                    'name': info_s['name'],
-                    'qty': float(info_s['qty']),
-                    'current_price': float(price_ils),
-                    'currency': 'ILS'
-                }
-            
-            # --- עדכון Trailing Stops ---
-            _trailing_updated = False
-            for ticker_s, stop_info in list(active_stops.items()):
-                if stop_info.get('type') != 'trailing' or ticker_s not in all_assets:
-                    continue
-                asset = all_assets[ticker_s]
-                trail_pct = stop_info.get('trail_pct', 5.0)
-                stop_currency = stop_info.get('currency', 'USD')
-                
-                # מחיר נוכחי במטבע הסטופ
-                if stop_currency == asset['currency']:
-                    cp = asset['current_price']
-                elif stop_currency == 'ILS' and asset['currency'] == 'USD':
-                    cp = asset['current_price'] * usd_to_ils
-                else:
-                    cp = asset['current_price'] / usd_to_ils
-                
-                old_hwm = stop_info.get('high_watermark', cp)
-                if cp > old_hwm:
-                    # מחיר עלה — עדכן את ה-watermark ואת מחיר הסטופ
-                    new_hwm = cp
-                    old_stop = active_stops[ticker_s].get('stop_price')
-                    new_stop = round(new_hwm * (1 - trail_pct / 100), 2)
-                    active_stops[ticker_s]['high_watermark'] = round(new_hwm, 2)
-                    active_stops[ticker_s]['stop_price'] = new_stop
-                    # אחרי העלאת סטופ, בדיקת Low תתחיל רק מנרות שאחרי חותמת הזמן הנוכחית
-                    if old_stop is None or new_stop != old_stop:
-                        active_stops[ticker_s]['check_from_ts'] = datetime.utcnow().isoformat()
-                    _trailing_updated = True
-            
-            if _trailing_updated:
-                if not db.save_stop_orders(active_stops):
-                    raise RuntimeError("עדכון ה-Trailing Stop לא נשמר; בדיקת הסטופים הופסקה")
-            
-            # בדוק כל פקודה פעילה מול מחיר נוכחי + Low intraday מסונן לפי שעת עדכון הסטופ
-            newly_executed = []
-            _today_str = datetime.now().strftime('%Y-%m-%d')
-            for ticker_s, stop_info in list(active_stops.items()):
-                if ticker_s not in all_assets:
-                    continue
 
-                # ביום הרכישה עצמו — לא בודקים סטופ
-                _purchase_date = cost_basis.get(ticker_s, {}).get('date', '')
-                if _purchase_date == _today_str:
-                    continue
+                # --- עדכון Trailing Stops ---
+                _trailing_updated = False
+                for ticker_s, stop_info in list(active_stops.items()):
+                    if stop_info.get('type') != 'trailing' or ticker_s not in all_assets:
+                        continue
+                    asset = all_assets[ticker_s]
+                    trail_pct = stop_info.get('trail_pct', 5.0)
+                    stop_currency = stop_info.get('currency', 'USD')
 
-                asset = all_assets[ticker_s]
-                stop_price = stop_info['stop_price']
-                stop_currency = stop_info.get('currency', 'USD')
-                
-                # מחיר נוכחי במטבע הסטופ
-                if stop_currency == asset['currency']:
-                    current_price = asset['current_price']
-                elif stop_currency == 'ILS' and asset['currency'] == 'USD':
-                    current_price = asset['current_price'] * usd_to_ils
-                else:
-                    current_price = asset['current_price'] / usd_to_ils
-                
-                # --- Low intraday מסונן ---
-                # אם עודכן סטופ תוך כדי יום, נסנן רק נרות שנצברו אחרי חותמת הזמן.
-                # כך מכוסה גם המקרה בו האפליקציה הייתה סגורה — בפתיחה הנרות כבר שמורים.
-                today_low_in_stop_cur = None
-                _check_from_ts_str = stop_info.get('check_from_ts')
-                _check_from_dt = None
-                if _check_from_ts_str:
-                    try:
-                        _check_from_dt = datetime.fromisoformat(_check_from_ts_str)
-                    except Exception:
-                        pass
+                    # מחיר נוכחי במטבע הסטופ
+                    if stop_currency == asset['currency']:
+                        cp = asset['current_price']
+                    elif stop_currency == 'ILS' and asset['currency'] == 'USD':
+                        cp = asset['current_price'] * usd_to_ils
+                    else:
+                        cp = asset['current_price'] / usd_to_ils
 
-                _intraday_df = history_data.get(f"{ticker_s}__intraday")
-                if _intraday_df is not None and not _intraday_df.empty:
-                    _filtered = _intraday_df
-                    if _check_from_dt is not None:
-                        try:
-                            _idx = _intraday_df.index
-                            if hasattr(_idx, 'tz') and _idx.tz is not None:
-                                import pytz as _pytz
-                                _gate = _pytz.utc.localize(_check_from_dt) if _check_from_dt.tzinfo is None else _check_from_dt.astimezone(_pytz.utc)
-                            else:
-                                _gate = _check_from_dt
-                            _filtered = _intraday_df[_intraday_df.index > _gate]
-                        except Exception:
-                            _filtered = _intraday_df
-                    if not _filtered.empty:
-                        _raw_low = float(_filtered['Low'].min())
-                        if stop_currency == asset['currency']:
-                            today_low_in_stop_cur = _raw_low
-                        elif stop_currency == 'ILS' and asset['currency'] == 'USD':
-                            today_low_in_stop_cur = _raw_low * usd_to_ils
-                        else:
-                            today_low_in_stop_cur = _raw_low / usd_to_ils
-                
-                # מחיר נוכחי: תמיד נבדק (אם המחיר כרגע ≤ סטופ — זה טריגר תקף)
-                _triggered_by_current = current_price <= stop_price
-                # Low: נבדק רק על נרות מסוננים שמאחרי check_from_ts
-                _triggered_by_low = today_low_in_stop_cur is not None and today_low_in_stop_cur <= stop_price
-                
-                if _triggered_by_current or _triggered_by_low:
-                    qty_s = asset['qty']
-                    proceeds = qty_s * stop_price
-                    symbol = "₪" if stop_currency == "ILS" else "$"
-                    _trigger_reason = "Low של היום" if (not _triggered_by_current and _triggered_by_low) else "מחיר נוכחי"
-                    _display_low = today_low_in_stop_cur if _triggered_by_low else None
-                    
-                    newly_executed.append({
-                        'ticker': ticker_s,
-                        'name': asset['name'],
-                        'qty': qty_s,
-                        'stop_price': stop_price,
-                        'market_price': round(current_price, 2),
-                        'today_low': round(_display_low, 2) if _display_low else None,
-                        'trigger_reason': _trigger_reason,
-                        'proceeds': round(proceeds, 2),
-                        'currency': stop_currency,
-                        'date': datetime.now().isoformat(timespec='seconds')
-                    })
-            
-            # אם יש פקודות שהתממשו — הצג התראה
-            if newly_executed:
-                st.markdown("---")
-                st.markdown("### 🚨 סטופ הופעל! אשר מכירה")
-                
-                _sale_prices = {}
-                for idx_ex, ex in enumerate(newly_executed):
-                    sym = "₪" if ex['currency'] == "ILS" else "$"
-                    _trigger_info = ex.get('trigger_reason', 'מחיר נוכחי')
-                    _low_str = f" | Low היום: {sym}{ex['today_low']:.2f}" if ex.get('today_low') else ""
-                    st.error(
-                        f"🚨 **STOP TRIGGERED: {ex['ticker']}** ({_trigger_info}) | "
-                        f"מחיר שוק: {sym}{ex['market_price']:.2f} | סטופ: {sym}{ex['stop_price']:.2f}{_low_str} | "
-                        f"{ex['qty']:.2f} יח' של {ex['name']}"
-                    )
-                    _sp_cols = st.columns([2, 2, 2])
-                    with _sp_cols[0]:
-                        st.metric("מחיר סטופ", f"{sym}{ex['stop_price']:.2f}")
-                    with _sp_cols[1]:
-                        _low_delta = f"Low: {sym}{ex['today_low']:.2f}" if ex.get('today_low') else None
-                        st.metric("מחיר שוק נוכחי", f"{sym}{ex['market_price']:.2f}", delta=_low_delta, delta_color="off")
-                    with _sp_cols[2]:
-                        _actual_price = st.number_input(
-                            f"💲 מחיר מכירה בפועל ({sym})",
-                            min_value=0.01,
-                            value=float(ex['market_price']),
-                            step=0.01,
-                            key=f"sale_price_{ex['ticker']}_{idx_ex}",
-                            help="הכנס את המחיר שבו המניה נמכרה בפועל (יכול להיות שונה ממחיר הסטופ)"
-                        )
-                    _sale_prices[ex['ticker']] = _actual_price
-                    _actual_proceeds = _actual_price * ex['qty']
-                    st.info(f"💰 תמורה בפועל: **{sym}{_actual_proceeds:,.2f}** ({ex['qty']:.2f} × {sym}{_actual_price:.2f})")
-                
-                st.markdown("")
-                if st.button("✅ אשר מכירות ועדכן תיק", key="confirm_stops"):
-                    total_proceeds_usd = 0
-                    total_proceeds_ils = 0
-                    for ex in newly_executed:
-                        t = ex['ticker']
-                        actual_price = _sale_prices.get(t, ex['market_price'])
-                        sold_entry = _record_sale(
-                            db,
-                            ticker=t,
-                            name=ex['name'],
-                            qty=ex['qty'],
-                            sale_price=actual_price,
-                            currency=ex['currency'],
-                            sale_date=datetime.now().isoformat(timespec='seconds'),
-                            stop_price=ex['stop_price'],
-                            reason='stop',
-                            fx_rate=usd_to_ils,
-                        )
-                        actual_proceeds = sold_entry['proceeds']
-                        
-                        if ex['currency'] == 'ILS':
-                            total_proceeds_ils += actual_proceeds
-                        else:
-                            total_proceeds_usd += actual_proceeds
-                    
-                    msg = f"✅ בוצע! {len(newly_executed)} פקודות סטופ הופעלו.\n\n"
-                    if total_proceeds_usd > 0:
-                        msg += f"💵 תמורה בדולר: ${total_proceeds_usd:,.2f} — **נוסף למזומן**\n\n"
-                    if total_proceeds_ils > 0:
-                        msg += f"💰 תמורה בשקלים: ₪{total_proceeds_ils:,.2f} — **נוסף למזומן**\n\n"
-                    msg += "🔄 התיק יתעדכן אוטומטית. רענן את הדף."
-                    st.success(msg)
-                    st.rerun()
-            
-            # טבלת סטטוס פקודות פעילות
-            if active_stops:
-                stop_rows = []
-                for ticker_s, stop_info in active_stops.items():
+                    old_hwm = stop_info.get('high_watermark', cp)
+                    if cp > old_hwm:
+                        # מחיר עלה — עדכן את ה-watermark ואת מחיר הסטופ
+                        new_hwm = cp
+                        old_stop = active_stops[ticker_s].get('stop_price')
+                        new_stop = round(new_hwm * (1 - trail_pct / 100), 2)
+                        active_stops[ticker_s]['high_watermark'] = round(new_hwm, 2)
+                        active_stops[ticker_s]['stop_price'] = new_stop
+                        # אחרי העלאת סטופ, בדיקת Low תתחיל רק מנרות שאחרי חותמת הזמן הנוכחית
+                        if old_stop is None or new_stop != old_stop:
+                            active_stops[ticker_s]['check_from_ts'] = datetime.utcnow().isoformat()
+                        _trailing_updated = True
+
+                if _trailing_updated:
+                    if not db.save_stop_orders(active_stops):
+                        raise RuntimeError("עדכון ה-Trailing Stop לא נשמר; בדיקת הסטופים הופסקה")
+
+                # בדוק כל פקודה פעילה מול מחיר נוכחי + Low intraday מסונן לפי שעת עדכון הסטופ
+                newly_executed = []
+                _today_str = datetime.now().strftime('%Y-%m-%d')
+                for ticker_s, stop_info in list(active_stops.items()):
                     if ticker_s not in all_assets:
                         continue
+
+                    # ביום הרכישה עצמו — לא בודקים סטופ
+                    _purchase_date = cost_basis.get(ticker_s, {}).get('date', '')
+                    if _purchase_date == _today_str:
+                        continue
+
                     asset = all_assets[ticker_s]
                     stop_price = stop_info['stop_price']
                     stop_currency = stop_info.get('currency', 'USD')
-                    sym = "₪" if stop_currency == "ILS" else "$"
-                    
+
                     # מחיר נוכחי במטבע הסטופ
                     if stop_currency == asset['currency']:
                         current_price = asset['current_price']
@@ -2314,641 +2181,789 @@ with main_tab:
                         current_price = asset['current_price'] * usd_to_ils
                     else:
                         current_price = asset['current_price'] / usd_to_ils
-                    
-                    qty_s = asset['qty']
-                    distance_pct = ((current_price - stop_price) / current_price * 100) if current_price > 0 else 0
-                    
-                    # רווח/הפסד מול מחיר רכישה אם הסטופ יתממש
-                    cb = cost_basis.get(ticker_s)
-                    if cb:
-                        cb_price = cb['price']
-                        cb_currency = cb['currency']
-                        # המרה אם צריך — נביא cost basis למטבע הסטופ
-                        if cb_currency == stop_currency:
-                            cb_in_stop_currency = cb_price
-                        elif cb_currency == 'ILS' and stop_currency == 'USD':
-                            cb_in_stop_currency = cb_price / usd_to_ils
-                        else:  # cb_currency == 'USD' and stop_currency == 'ILS'
-                            cb_in_stop_currency = cb_price * usd_to_ils
-                        # רווח כרגע = (מחיר נוכחי - מחיר קנייה) × כמות
-                        current_pnl = qty_s * (current_price - cb_in_stop_currency)
-                        current_pnl_str = f"{sym}{current_pnl:+,.2f}"
-                        # רווח/הפסד אם הסטופ יתממש = (מחיר סטופ - מחיר קנייה) × כמות
-                        pnl_vs_cost = qty_s * (stop_price - cb_in_stop_currency)
-                        pnl_vs_cost_str = f"{sym}{pnl_vs_cost:+,.2f}"
-                    else:
-                        current_pnl_str = "—"
-                    # חישוב ATR לקביעת סטטוס (מרחק < 2×ATR = קרוב)
-                    _atr_val = None
-                    _atr_str = "—"
-                    if ticker_s in history_data:
-                        _atr_val = calc_atr(history_data[ticker_s])
-                    if _atr_val is not None and _atr_val > 0:
-                        # ATR ביחידות USD — אם הסטופ ב-ILS צריך להמיר
-                        if stop_currency == 'ILS' and asset['currency'] == 'USD':
-                            atr_in_stop_cur = _atr_val * usd_to_ils
-                        elif stop_currency == 'USD' and asset['currency'] == 'ILS':
-                            atr_in_stop_cur = _atr_val / usd_to_ils
-                        else:
-                            atr_in_stop_cur = _atr_val
-                        distance_abs = current_price - stop_price
-                        atr_ratio = distance_abs / atr_in_stop_cur if atr_in_stop_cur > 0 else 99
-                        _atr_str = f"{sym}{atr_in_stop_cur:,.2f} ({atr_ratio:.1f}×)"
-                        if atr_ratio < 1:
-                            status = "🔴 קרוב מאוד!"
-                        elif atr_ratio < 2:
-                            status = "🟡 מתקרב"
-                        else:
-                            status = "🟢 בטוח"
-                    else:
-                        # fallback — אין ATR (נכס ישראלי ללא היסטוריה)
-                        if distance_pct <= 2:
-                            status = "🔴 קרוב מאוד!"
-                        elif distance_pct <= 5:
-                            status = "🟡 מתקרב"
-                        else:
-                            status = "🟢 בטוח"
-                    
-                    stop_rows.append({
-                        'סטטוס': status,
-                        'טיקר': ticker_s,
-                        'שם': asset['name'],
-                        'סוג': f"📉 Trailing {stop_info['trail_pct']}%" if stop_info.get('type') == 'trailing' else "🛑 Stop",
-                        'כמות': f"{qty_s:.2f}",
-                        'מחיר קנייה': f"{sym}{cb_in_stop_currency:,.2f}" if cb else "—",
-                        'מחיר נוכחי': f"{sym}{current_price:,.2f}",
-                        'מחיר סטופ': f"{sym}{stop_price:,.2f}",
-                        'ATR(14)': _atr_str,
-                        'מרחק': f"{distance_pct:.1f}%",
-                        'רווח כרגע': current_pnl_str,
-                        'רווח/הפסד במימוש': pnl_vs_cost_str,
-                    })
-                
-                if stop_rows:
-                    stop_df = pd.DataFrame(stop_rows)
-                    st.dataframe(stop_df, hide_index=True)
-                
-                # --- עריכת מחיר סטופ ---
-                st.markdown("**✏️ עריכת מחיר סטופ:**")
-                _edit_cols = st.columns([2, 2, 2, 1])
-                _stop_tickers = [t for t in active_stops if t in all_assets]
-                with _edit_cols[0]:
-                    _edit_stop_ticker = st.selectbox(
-                        "בחר נכס",
-                        _stop_tickers,
-                        format_func=lambda t: f"{t} — {all_assets[t]['name']}",
-                        key="edit_stop_ticker"
-                    )
-                if _edit_stop_ticker:
-                    _cur_stop = active_stops[_edit_stop_ticker]
-                    _stop_sym = "₪" if _cur_stop.get('currency', 'USD') == 'ILS' else "$"
-                    with _edit_cols[1]:
-                        st.metric("מחיר סטופ נוכחי", f"{_stop_sym}{_cur_stop['stop_price']:,.2f}")
-                    with _edit_cols[2]:
-                        _new_stop_price = st.number_input(
-                            f"מחיר סטופ חדש ({_stop_sym})",
-                            min_value=0.01,
-                            value=float(_cur_stop['stop_price']),
-                            step=1.0,
-                            key="new_stop_price"
-                        )
-                    with _edit_cols[3]:
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        if st.button("💾 עדכן", key="update_stop_btn", use_container_width=True):
-                            _updated_stops = copy.deepcopy(active_stops)
-                            _updated_stops[_edit_stop_ticker]['stop_price'] = round(_new_stop_price, 2)
-                            # בדיקת Low תסנן רק נרות שנצברו אחרי רגע זה
-                            _updated_stops[_edit_stop_ticker]['check_from_ts'] = datetime.utcnow().isoformat()
-                            if db.save_stop_orders(_updated_stops):
-                                st.success(f"✅ סטופ {_edit_stop_ticker} עודכן ל-{_stop_sym}{_new_stop_price:,.2f}")
-                                st.rerun()
-                            else:
-                                st.error("עדכון הסטופ לא נשמר; המחיר הקודם נשאר פעיל.")
-            else:
-                st.info("אין פקודות סטופ פעילות.")
 
-            st.markdown("**💸 רישום מכירה ידנית:**")
-            _manual_sale_tickers = [t for t in all_assets if t not in ('CASH_USD', 'CASH_ILS')]
-            if _manual_sale_tickers:
-                _manual_cols = st.columns([2, 1, 1, 1])
-                with _manual_cols[0]:
-                    _manual_ticker = st.selectbox(
-                        "בחר נכס למכירה",
-                        _manual_sale_tickers,
-                        format_func=lambda t: f"{t} — {all_assets[t]['name']}",
-                        key="manual_sale_ticker"
-                    )
-                _manual_asset = all_assets[_manual_ticker]
-                _manual_sym = "₪" if _manual_asset['currency'] == 'ILS' else "$"
-                with _manual_cols[1]:
-                    st.metric("כמות למכירה", f"{_manual_asset['qty']:.2f}")
-                with _manual_cols[2]:
-                    _manual_sale_price = st.number_input(
-                        f"מחיר מכירה ({_manual_sym})",
-                        min_value=0.01,
-                        value=float(_manual_asset['current_price']),
-                        step=0.01,
-                        key="manual_sale_price"
-                    )
-                with _manual_cols[3]:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("🧾 רשום מכירה", key="record_manual_sale", use_container_width=True):
-                        _manual_stop = active_stops.get(_manual_ticker, {}).get('stop_price')
-                        _manual_entry = _record_sale(
-                            db,
-                            ticker=_manual_ticker,
-                            name=_manual_asset['name'],
-                            qty=_manual_asset['qty'],
-                            sale_price=_manual_sale_price,
-                            currency=_manual_asset['currency'],
-                            sale_date=datetime.now().isoformat(timespec='seconds'),
-                            stop_price=_manual_stop,
-                            reason='manual',
-                            fx_rate=usd_to_ils,
-                        )
-                        st.success(
-                            f"✅ נרשמה מכירה של {_manual_ticker} במחיר {_manual_sym}{_manual_sale_price:,.2f}. "
-                            f"המזומן עודכן ב-{_manual_sym}{_manual_entry['proceeds']:,.2f}."
-                        )
-                        st.rerun()
-            else:
-                st.info("אין נכסים זמינים לרישום מכירה ידנית.")
-
-            # היסטוריית מכירות ממומשות
-            if executed_history:
-                with st.expander(f"📜 היסטוריית מכירות שבוצעו ({len(executed_history)})", expanded=False):
-                    hist_rows = []
-                    total_realized_pnl_usd = 0.0
-                    total_realized_pnl_ils = 0.0
-                    for ex in reversed(executed_history):
-                        if not isinstance(ex, dict) or not ex.get('ticker'):
-                            continue
-                        _is_ils = ex.get('currency') == "ILS"
-                        sym = "₪" if _is_ils else "$"
+                    # --- Low intraday מסונן ---
+                    # אם עודכן סטופ תוך כדי יום, נסנן רק נרות שנצברו אחרי חותמת הזמן.
+                    # כך מכוסה גם המקרה בו האפליקציה הייתה סגורה — בפתיחה הנרות כבר שמורים.
+                    today_low_in_stop_cur = None
+                    _check_from_ts_str = stop_info.get('check_from_ts')
+                    _check_from_dt = None
+                    if _check_from_ts_str:
                         try:
-                            _sale_p = float(ex.get('sale_price', ex.get('market_price', ex.get('stop_price'))))
-                            _qty = float(ex.get('qty', 0))
-                            _commission = float(ex.get('commission_usd', 0.0) or 0.0)
-                        except (TypeError, ValueError):
-                            continue
-                        if _sale_p <= 0 or _qty <= 0:
-                            continue
-                        _gross_proceeds = _sale_p * _qty
-                        _stored_proceeds = ex.get('proceeds')
-                        if _stored_proceeds is None:
-                            _proceeds = round(_gross_proceeds - (_commission if not _is_ils else 0.0), 2)
-                        else:
+                            _check_from_dt = datetime.fromisoformat(_check_from_ts_str)
+                        except Exception:
+                            pass
+
+                    _intraday_df = history_data.get(f"{ticker_s}__intraday")
+                    if _intraday_df is not None and not _intraday_df.empty:
+                        _filtered = _intraday_df
+                        if _check_from_dt is not None:
                             try:
-                                _stored_proceeds = float(_stored_proceeds)
+                                _idx = _intraday_df.index
+                                if hasattr(_idx, 'tz') and _idx.tz is not None:
+                                    import pytz as _pytz
+                                    _gate = _pytz.utc.localize(_check_from_dt) if _check_from_dt.tzinfo is None else _check_from_dt.astimezone(_pytz.utc)
+                                else:
+                                    _gate = _check_from_dt
+                                _filtered = _intraday_df[_intraday_df.index > _gate]
+                            except Exception:
+                                _filtered = _intraday_df
+                        if not _filtered.empty:
+                            _raw_low = float(_filtered['Low'].min())
+                            if stop_currency == asset['currency']:
+                                today_low_in_stop_cur = _raw_low
+                            elif stop_currency == 'ILS' and asset['currency'] == 'USD':
+                                today_low_in_stop_cur = _raw_low * usd_to_ils
+                            else:
+                                today_low_in_stop_cur = _raw_low / usd_to_ils
+
+                    # מחיר נוכחי: תמיד נבדק (אם המחיר כרגע ≤ סטופ — זה טריגר תקף)
+                    _triggered_by_current = current_price <= stop_price
+                    # Low: נבדק רק על נרות מסוננים שמאחרי check_from_ts
+                    _triggered_by_low = today_low_in_stop_cur is not None and today_low_in_stop_cur <= stop_price
+
+                    if _triggered_by_current or _triggered_by_low:
+                        qty_s = asset['qty']
+                        proceeds = qty_s * stop_price
+                        symbol = "₪" if stop_currency == "ILS" else "$"
+                        _trigger_reason = "Low של היום" if (not _triggered_by_current and _triggered_by_low) else "מחיר נוכחי"
+                        _display_low = today_low_in_stop_cur if _triggered_by_low else None
+
+                        newly_executed.append({
+                            'ticker': ticker_s,
+                            'name': asset['name'],
+                            'qty': qty_s,
+                            'stop_price': stop_price,
+                            'market_price': round(current_price, 2),
+                            'today_low': round(_display_low, 2) if _display_low else None,
+                            'trigger_reason': _trigger_reason,
+                            'proceeds': round(proceeds, 2),
+                            'currency': stop_currency,
+                            'date': datetime.now().isoformat(timespec='seconds')
+                        })
+
+                # אם יש פקודות שהתממשו — הצג התראה
+                if newly_executed:
+                    st.markdown("---")
+                    st.markdown("### 🚨 סטופ הופעל! אשר מכירה")
+
+                    _sale_prices = {}
+                    for idx_ex, ex in enumerate(newly_executed):
+                        sym = "₪" if ex['currency'] == "ILS" else "$"
+                        _trigger_info = ex.get('trigger_reason', 'מחיר נוכחי')
+                        _low_str = f" | Low היום: {sym}{ex['today_low']:.2f}" if ex.get('today_low') else ""
+                        st.error(
+                            f"🚨 **STOP TRIGGERED: {ex['ticker']}** ({_trigger_info}) | "
+                        f"מחיר שוק: {sym}{ex['market_price']:.2f} | סטופ: {sym}{ex['stop_price']:.2f}{_low_str} | "
+                        f"{ex['qty']:.2f} יח' של {ex['name']}"
+                        )
+                        _sp_cols = st.columns([2, 2, 2])
+                        with _sp_cols[0]:
+                            st.metric("מחיר סטופ", f"{sym}{ex['stop_price']:.2f}")
+                        with _sp_cols[1]:
+                            _low_delta = f"Low: {sym}{ex['today_low']:.2f}" if ex.get('today_low') else None
+                            st.metric("מחיר שוק נוכחי", f"{sym}{ex['market_price']:.2f}", delta=_low_delta, delta_color="off")
+                        with _sp_cols[2]:
+                            _actual_price = st.number_input(
+                                f"💲 מחיר מכירה בפועל ({sym})",
+                                min_value=0.01,
+                                value=float(ex['market_price']),
+                                step=0.01,
+                                key=f"sale_price_{ex['ticker']}_{idx_ex}",
+                                help="הכנס את המחיר שבו המניה נמכרה בפועל (יכול להיות שונה ממחיר הסטופ)"
+                            )
+                        _sale_prices[ex['ticker']] = _actual_price
+                        _actual_proceeds = _actual_price * ex['qty']
+                        st.info(f"💰 תמורה בפועל: **{sym}{_actual_proceeds:,.2f}** ({ex['qty']:.2f} × {sym}{_actual_price:.2f})")
+
+                    st.markdown("")
+                    if st.button("✅ אשר מכירות ועדכן תיק", key="confirm_stops"):
+                        total_proceeds_usd = 0
+                        total_proceeds_ils = 0
+                        for ex in newly_executed:
+                            t = ex['ticker']
+                            actual_price = _sale_prices.get(t, ex['market_price'])
+                            sold_entry = _record_sale(
+                                db,
+                                ticker=t,
+                                name=ex['name'],
+                                qty=ex['qty'],
+                                sale_price=actual_price,
+                                currency=ex['currency'],
+                                sale_date=datetime.now().isoformat(timespec='seconds'),
+                                stop_price=ex['stop_price'],
+                                reason='stop',
+                                fx_rate=usd_to_ils,
+                            )
+                            actual_proceeds = sold_entry['proceeds']
+
+                            if ex['currency'] == 'ILS':
+                                total_proceeds_ils += actual_proceeds
+                            else:
+                                total_proceeds_usd += actual_proceeds
+
+                        msg = f"✅ בוצע! {len(newly_executed)} פקודות סטופ הופעלו.\n\n"
+                        if total_proceeds_usd > 0:
+                            msg += f"💵 תמורה בדולר: ${total_proceeds_usd:,.2f} — **נוסף למזומן**\n\n"
+                        if total_proceeds_ils > 0:
+                            msg += f"💰 תמורה בשקלים: ₪{total_proceeds_ils:,.2f} — **נוסף למזומן**\n\n"
+                        msg += "🔄 התיק יתעדכן אוטומטית. רענן את הדף."
+                        st.success(msg)
+                        st.rerun()
+
+                # טבלת סטטוס פקודות פעילות
+                if active_stops:
+                    stop_rows = []
+                    for ticker_s, stop_info in active_stops.items():
+                        if ticker_s not in all_assets:
+                            continue
+                        asset = all_assets[ticker_s]
+                        stop_price = stop_info['stop_price']
+                        stop_currency = stop_info.get('currency', 'USD')
+                        sym = "₪" if stop_currency == "ILS" else "$"
+
+                        # מחיר נוכחי במטבע הסטופ
+                        if stop_currency == asset['currency']:
+                            current_price = asset['current_price']
+                        elif stop_currency == 'ILS' and asset['currency'] == 'USD':
+                            current_price = asset['current_price'] * usd_to_ils
+                        else:
+                            current_price = asset['current_price'] / usd_to_ils
+
+                        qty_s = asset['qty']
+                        distance_pct = ((current_price - stop_price) / current_price * 100) if current_price > 0 else 0
+
+                        # רווח/הפסד מול מחיר רכישה אם הסטופ יתממש
+                        cb = cost_basis.get(ticker_s)
+                        if cb:
+                            cb_price = cb['price']
+                            cb_currency = cb['currency']
+                            # המרה אם צריך — נביא cost basis למטבע הסטופ
+                            if cb_currency == stop_currency:
+                                cb_in_stop_currency = cb_price
+                            elif cb_currency == 'ILS' and stop_currency == 'USD':
+                                cb_in_stop_currency = cb_price / usd_to_ils
+                            else:  # cb_currency == 'USD' and stop_currency == 'ILS'
+                                cb_in_stop_currency = cb_price * usd_to_ils
+                            # רווח כרגע = (מחיר נוכחי - מחיר קנייה) × כמות
+                            current_pnl = qty_s * (current_price - cb_in_stop_currency)
+                            current_pnl_str = f"{sym}{current_pnl:+,.2f}"
+                            # רווח/הפסד אם הסטופ יתממש = (מחיר סטופ - מחיר קנייה) × כמות
+                            pnl_vs_cost = qty_s * (stop_price - cb_in_stop_currency)
+                            pnl_vs_cost_str = f"{sym}{pnl_vs_cost:+,.2f}"
+                        else:
+                            current_pnl_str = "—"
+                        # חישוב ATR לקביעת סטטוס (מרחק < 2×ATR = קרוב)
+                        _atr_val = None
+                        _atr_str = "—"
+                        if ticker_s in history_data:
+                            _atr_val = calc_atr(history_data[ticker_s])
+                        if _atr_val is not None and _atr_val > 0:
+                            # ATR ביחידות USD — אם הסטופ ב-ILS צריך להמיר
+                            if stop_currency == 'ILS' and asset['currency'] == 'USD':
+                                atr_in_stop_cur = _atr_val * usd_to_ils
+                            elif stop_currency == 'USD' and asset['currency'] == 'ILS':
+                                atr_in_stop_cur = _atr_val / usd_to_ils
+                            else:
+                                atr_in_stop_cur = _atr_val
+                            distance_abs = current_price - stop_price
+                            atr_ratio = distance_abs / atr_in_stop_cur if atr_in_stop_cur > 0 else 99
+                            _atr_str = f"{sym}{atr_in_stop_cur:,.2f} ({atr_ratio:.1f}×)"
+                            if atr_ratio < 1:
+                                status = "🔴 קרוב מאוד!"
+                            elif atr_ratio < 2:
+                                status = "🟡 מתקרב"
+                            else:
+                                status = "🟢 בטוח"
+                        else:
+                            # fallback — אין ATR (נכס ישראלי ללא היסטוריה)
+                            if distance_pct <= 2:
+                                status = "🔴 קרוב מאוד!"
+                            elif distance_pct <= 5:
+                                status = "🟡 מתקרב"
+                            else:
+                                status = "🟢 בטוח"
+
+                        stop_rows.append({
+                            'סטטוס': status,
+                            'טיקר': ticker_s,
+                            'שם': asset['name'],
+                            'סוג': f"📉 Trailing {stop_info['trail_pct']}%" if stop_info.get('type') == 'trailing' else "🛑 Stop",
+                            'כמות': f"{qty_s:.2f}",
+                            'מחיר קנייה': f"{sym}{cb_in_stop_currency:,.2f}" if cb else "—",
+                            'מחיר נוכחי': f"{sym}{current_price:,.2f}",
+                            'מחיר סטופ': f"{sym}{stop_price:,.2f}",
+                            'ATR(14)': _atr_str,
+                            'מרחק': f"{distance_pct:.1f}%",
+                            'רווח כרגע': current_pnl_str,
+                            'רווח/הפסד במימוש': pnl_vs_cost_str,
+                        })
+
+                    if stop_rows:
+                        stop_df = pd.DataFrame(stop_rows)
+                        st.dataframe(stop_df, hide_index=True)
+
+                    # --- עריכת מחיר סטופ ---
+                    st.markdown("**✏️ עריכת מחיר סטופ:**")
+                    _edit_cols = st.columns([2, 2, 2, 1])
+                    _stop_tickers = [t for t in active_stops if t in all_assets]
+                    with _edit_cols[0]:
+                        _edit_stop_ticker = st.selectbox(
+                            "בחר נכס",
+                            _stop_tickers,
+                            format_func=lambda t: f"{t} — {all_assets[t]['name']}",
+                            key="edit_stop_ticker"
+                        )
+                    if _edit_stop_ticker:
+                        _cur_stop = active_stops[_edit_stop_ticker]
+                        _stop_sym = "₪" if _cur_stop.get('currency', 'USD') == 'ILS' else "$"
+                        with _edit_cols[1]:
+                            st.metric("מחיר סטופ נוכחי", f"{_stop_sym}{_cur_stop['stop_price']:,.2f}")
+                        with _edit_cols[2]:
+                            _new_stop_price = st.number_input(
+                                f"מחיר סטופ חדש ({_stop_sym})",
+                                min_value=0.01,
+                                value=float(_cur_stop['stop_price']),
+                                step=1.0,
+                                key="new_stop_price"
+                            )
+                        with _edit_cols[3]:
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            if st.button("💾 עדכן", key="update_stop_btn", use_container_width=True):
+                                _updated_stops = copy.deepcopy(active_stops)
+                                _updated_stops[_edit_stop_ticker]['stop_price'] = round(_new_stop_price, 2)
+                                # בדיקת Low תסנן רק נרות שנצברו אחרי רגע זה
+                                _updated_stops[_edit_stop_ticker]['check_from_ts'] = datetime.utcnow().isoformat()
+                                if db.save_stop_orders(_updated_stops):
+                                    st.success(f"✅ סטופ {_edit_stop_ticker} עודכן ל-{_stop_sym}{_new_stop_price:,.2f}")
+                                    st.rerun()
+                                else:
+                                    st.error("עדכון הסטופ לא נשמר; המחיר הקודם נשאר פעיל.")
+                else:
+                    st.info("אין פקודות סטופ פעילות.")
+
+                st.markdown("**💸 רישום מכירה ידנית:**")
+                _manual_sale_tickers = [t for t in all_assets if t not in ('CASH_USD', 'CASH_ILS')]
+                if _manual_sale_tickers:
+                    _manual_cols = st.columns([2, 1, 1, 1])
+                    with _manual_cols[0]:
+                        _manual_ticker = st.selectbox(
+                            "בחר נכס למכירה",
+                            _manual_sale_tickers,
+                            format_func=lambda t: f"{t} — {all_assets[t]['name']}",
+                            key="manual_sale_ticker"
+                        )
+                    _manual_asset = all_assets[_manual_ticker]
+                    _manual_sym = "₪" if _manual_asset['currency'] == 'ILS' else "$"
+                    with _manual_cols[1]:
+                        st.metric("כמות למכירה", f"{_manual_asset['qty']:.2f}")
+                    with _manual_cols[2]:
+                        _manual_sale_price = st.number_input(
+                            f"מחיר מכירה ({_manual_sym})",
+                            min_value=0.01,
+                            value=float(_manual_asset['current_price']),
+                            step=0.01,
+                            key="manual_sale_price"
+                        )
+                    with _manual_cols[3]:
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.button("🧾 רשום מכירה", key="record_manual_sale", use_container_width=True):
+                            _manual_stop = active_stops.get(_manual_ticker, {}).get('stop_price')
+                            _manual_entry = _record_sale(
+                                db,
+                                ticker=_manual_ticker,
+                                name=_manual_asset['name'],
+                                qty=_manual_asset['qty'],
+                                sale_price=_manual_sale_price,
+                                currency=_manual_asset['currency'],
+                                sale_date=datetime.now().isoformat(timespec='seconds'),
+                                stop_price=_manual_stop,
+                                reason='manual',
+                                fx_rate=usd_to_ils,
+                            )
+                            st.success(
+                                f"✅ נרשמה מכירה של {_manual_ticker} במחיר {_manual_sym}{_manual_sale_price:,.2f}. "
+                            f"המזומן עודכן ב-{_manual_sym}{_manual_entry['proceeds']:,.2f}."
+                            )
+                            st.rerun()
+                else:
+                    st.info("אין נכסים זמינים לרישום מכירה ידנית.")
+
+                # היסטוריית מכירות ממומשות
+                if executed_history:
+                    with st.expander(f"📜 היסטוריית מכירות שבוצעו ({len(executed_history)})", expanded=False):
+                        hist_rows = []
+                        total_realized_pnl_usd = 0.0
+                        total_realized_pnl_ils = 0.0
+                        for ex in reversed(executed_history):
+                            if not isinstance(ex, dict) or not ex.get('ticker'):
+                                continue
+                            _is_ils = ex.get('currency') == "ILS"
+                            sym = "₪" if _is_ils else "$"
+                            try:
+                                _sale_p = float(ex.get('sale_price', ex.get('market_price', ex.get('stop_price'))))
+                                _qty = float(ex.get('qty', 0))
+                                _commission = float(ex.get('commission_usd', 0.0) or 0.0)
                             except (TypeError, ValueError):
-                                _stored_proceeds = None
+                                continue
+                            if _sale_p <= 0 or _qty <= 0:
+                                continue
+                            _gross_proceeds = _sale_p * _qty
+                            _stored_proceeds = ex.get('proceeds')
                             if _stored_proceeds is None:
                                 _proceeds = round(_gross_proceeds - (_commission if not _is_ils else 0.0), 2)
-                            elif (not _is_ils) and _commission and abs(_stored_proceeds - _gross_proceeds) < 0.02:
-                                _proceeds = round(_stored_proceeds - _commission, 2)
                             else:
-                                _proceeds = _stored_proceeds
-                        # חישוב רווח/הפסד — קודם מהרשומה עצמה, אחרת מה-cost_basis
-                        _cost_per = ex.get('cost_per_share')
-                        if _cost_per is None:
-                            _cb = cost_basis.get(ex['ticker'])
-                            _cost_per = _cb['price'] if _cb else None
-                        if _cost_per:
-                            try:
-                                _cost_per = float(_cost_per)
-                            except (TypeError, ValueError):
-                                _cost_per = None
-                        if _cost_per and _cost_per > 0:
-                            _total_cost = _cost_per * _qty
-                            _commission_in_trade_currency = 0.0
-                            if _is_ils:
                                 try:
-                                    _commission_in_trade_currency = float(ex.get('commission_ils') or 0.0)
+                                    _stored_proceeds = float(_stored_proceeds)
                                 except (TypeError, ValueError):
-                                    _commission_in_trade_currency = 0.0
-                            _pnl = _proceeds - _total_cost - _commission_in_trade_currency
-                            _pnl_pct = (_pnl / _total_cost * 100) if _total_cost > 0 else 0
-                            _pnl_str = f"{sym}{_pnl:+,.2f} ({_pnl_pct:+.1f}%)"
-                            _cost_str = f"{sym}{_cost_per:,.2f}"
-                            if _is_ils:
-                                total_realized_pnl_ils += _pnl
+                                    _stored_proceeds = None
+                                if _stored_proceeds is None:
+                                    _proceeds = round(_gross_proceeds - (_commission if not _is_ils else 0.0), 2)
+                                elif (not _is_ils) and _commission and abs(_stored_proceeds - _gross_proceeds) < 0.02:
+                                    _proceeds = round(_stored_proceeds - _commission, 2)
+                                else:
+                                    _proceeds = _stored_proceeds
+                            # חישוב רווח/הפסד — קודם מהרשומה עצמה, אחרת מה-cost_basis
+                            _cost_per = ex.get('cost_per_share')
+                            if _cost_per is None:
+                                _cb = cost_basis.get(ex['ticker'])
+                                _cost_per = _cb['price'] if _cb else None
+                            if _cost_per:
+                                try:
+                                    _cost_per = float(_cost_per)
+                                except (TypeError, ValueError):
+                                    _cost_per = None
+                            if _cost_per and _cost_per > 0:
+                                _total_cost = _cost_per * _qty
+                                _commission_in_trade_currency = 0.0
+                                if _is_ils:
+                                    try:
+                                        _commission_in_trade_currency = float(ex.get('commission_ils') or 0.0)
+                                    except (TypeError, ValueError):
+                                        _commission_in_trade_currency = 0.0
+                                _pnl = _proceeds - _total_cost - _commission_in_trade_currency
+                                _pnl_pct = (_pnl / _total_cost * 100) if _total_cost > 0 else 0
+                                _pnl_str = f"{sym}{_pnl:+,.2f} ({_pnl_pct:+.1f}%)"
+                                _cost_str = f"{sym}{_cost_per:,.2f}"
+                                if _is_ils:
+                                    total_realized_pnl_ils += _pnl
+                                else:
+                                    total_realized_pnl_usd += _pnl
                             else:
-                                total_realized_pnl_usd += _pnl
+                                _pnl_str = "—"
+                                _cost_str = "—"
+
+                            hist_rows.append({
+                                'תאריך': ex.get('date', '—'),
+                                'טיקר': ex['ticker'],
+                                'שם': ex.get('name', '—'),
+                                'סוג': '🛑 סטופ' if ex.get('reason') == 'stop' else '💸 ידני',
+                                'כמות': f"{_qty:.0f}",
+                                'עלות רכישה': _cost_str,
+                                'מחיר סטופ': f"{sym}{ex['stop_price']:,.2f}" if ex.get('stop_price') is not None else "—",
+                                'מחיר מכירה': f"{sym}{_sale_p:,.2f}",
+                                'תמורה': f"{sym}{_proceeds:,.2f}",
+                                'רווח/הפסד': _pnl_str,
+                            })
+
+                        if hist_rows:
+                            st.dataframe(pd.DataFrame(hist_rows), hide_index=True, use_container_width=True)
+
+                            # סיכום כולל — רווח/הפסד ממומש בלבד
+                            _pnl_color_usd = "🟢" if total_realized_pnl_usd >= 0 else "🔴"
+                            hc1, hc2 = st.columns(2)
+                            hc1.metric(f"{_pnl_color_usd} רווח/הפסד ממומש ($)", f"${total_realized_pnl_usd:+,.2f}")
+                            hc2.metric("📊 עסקאות", f"{len(executed_history)}")
+                            if total_realized_pnl_ils != 0:
+                                _pnl_color_ils = "🟢" if total_realized_pnl_ils >= 0 else "🔴"
+                                hc3, hc4 = st.columns(2)
+                                hc3.metric(f"{_pnl_color_ils} רווח/הפסד ממומש (₪)", f"₪{total_realized_pnl_ils:+,.2f}")
+                                hc4.metric("", "")
+            except Exception as e:
+                st.error(f"⚠️ שגיאה בסקציית סטופ: {e}")
+
+
+            st.divider()
+
+            # ==================== הכנסה פסיבית מדיבידנדים ====================
+            st.subheader("💰 הכנסה פסיבית מדיבידנדים")
+
+            # ערכי seed בלבד — ישמשו fallback לנכסים שלא עודכנו עדיין מה-API
+            _seed_dividends = {
+                "IEFA":   3.178,
+                "IEMG":   1.849,
+                "MSFT":   3.56,
+                "SFL":    0.47,
+                "BKR":    0.92,
+                "NVDA":   0.04,
+                "LIN":    6.10,
+                "PPA":    0.656,
+            }
+
+            # רשימת כל הטיקרים הנוכחיים בתיק (US בלבד — לא ישראליים ולא מזומן)
+            _current_us_tickers = tuple(t for t in portfolio if t not in israeli_stocks)
+
+            # כפתור עדכון — שולח את כל הטיקרים הנוכחיים (לא רק ה-seed)
+            div_col1, div_col2 = st.columns([1, 4])
+            with div_col1:
+                update_div = st.button("🔄 עדכן דיבידנדים", help="משיכת נתוני דיבידנד עדכניים מ-yfinance (לוקח ~30 שניות)")
+
+            if update_div:
+                with st.spinner("⏳ מושך נתוני דיבידנד עדכניים..."):
+                    fetch_live_dividends.clear()
+                    fetch_notification_data.clear()
+                    live = fetch_live_dividends(_current_us_tickers)
+                    _live_notifications = fetch_notification_data(_current_us_tickers)
+                if live:
+                    _new_dividend_snapshot = {
+                        "rates": live,
+                        "notifications": {
+                            ticker: {
+                                "ex_div_date": details.get("ex_div_date"),
+                                "div_date": details.get("div_date"),
+                            }
+                            for ticker, details in _live_notifications.items()
+                        },
+                        "tickers": list(_current_us_tickers),
+                        "updated_at": datetime.now().isoformat(timespec="seconds"),
+                        "source": "yfinance",
+                    }
+                    if db.save_dividend_snapshot(_new_dividend_snapshot):
+                        with div_col2:
+                            st.success(f"✅ נשמרו נתוני דיבידנד עבור {len(live)} נכסים.")
+                    else:
+                        with div_col2:
+                            st.error("הנתונים נמשכו אך השמירה נכשלה; הטבלה הקודמת נשארה זמינה.")
+                else:
+                    with div_col2:
+                        st.warning("⚠️ לא הצליח לעדכן")
+
+            # בנה known_dividends:
+            # 1. seed רק לנכסים שעדיין בתיק
+            # 2. live data שנשמרה ב-DB בעדיפות (לא נדרש רענון בכל פעם)
+            _base_div = {k: v for k, v in _seed_dividends.items() if k in portfolio}
+            _dividend_snapshot = db.get_dividend_snapshot() or {}
+            if not isinstance(_dividend_snapshot, dict):
+                _dividend_snapshot = {}
+            _saved_live_divs = _dividend_snapshot.get('rates', {})
+            # תאימות לנתונים שנשמרו בעבר בתוך מצב המזומן — ללא שינוי או מחיקה שלהם.
+            if not _saved_live_divs:
+                _saved_live_divs = _saved_deposits.get('saved_dividends', {})
+            if _saved_live_divs:
+                _live_for_portfolio = {k: v for k, v in _saved_live_divs.items() if k in portfolio}
+                known_dividends = {**_base_div, **_live_for_portfolio}
+            else:
+                known_dividends = _base_div
+
+            div_rows = []
+            total_annual_div_usd = 0
+
+            # תאריכי Ex/תשלום מגיעים מה-snapshot השמור ומתעדכנים רק בלחיצה.
+            _div_notif = _dividend_snapshot.get('notifications', {})
+
+            for ticker, div_per_share in known_dividends.items():
+                if div_per_share <= 0:
+                    continue
+                asset_row = df[df['Ticker'] == ticker]
+                if asset_row.empty:
+                    continue
+
+                price = float(asset_row['Price'].iloc[0])
+                qty = portfolio[ticker]['qty']
+                info = portfolio[ticker]
+
+                annual_income = div_per_share * qty
+                actual_yield = div_per_share / price * 100 if price > 0 else 0
+
+                total_annual_div_usd += annual_income
+
+                # תאריך Ex-Dividend ותאריך תשלום
+                _ex_date_str  = "לא ידוע"
+                _pay_date_str = "לא ידוע"
+                _ex_ts  = _div_notif.get(ticker, {}).get('ex_div_date')
+                _pay_ts = _div_notif.get(ticker, {}).get('div_date')
+                if _ex_ts:
+                    try:
+                        _ex_dt = datetime.fromtimestamp(_ex_ts)
+                        _days = (_ex_dt - datetime.now()).days
+                        _date_fmt = _ex_dt.strftime('%d/%m/%Y')
+                        if _days > 0:
+                            _ex_date_str = f"{_date_fmt} (בעוד {_days} ימים)"
+                        elif _days == 0:
+                            _ex_date_str = f"{_date_fmt} (היום!)"
                         else:
-                            _pnl_str = "—"
-                            _cost_str = "—"
-                        
-                        hist_rows.append({
-                            'תאריך': ex.get('date', '—'),
-                            'טיקר': ex['ticker'],
-                            'שם': ex.get('name', '—'),
-                            'סוג': '🛑 סטופ' if ex.get('reason') == 'stop' else '💸 ידני',
-                            'כמות': f"{_qty:.0f}",
-                            'עלות רכישה': _cost_str,
-                            'מחיר סטופ': f"{sym}{ex['stop_price']:,.2f}" if ex.get('stop_price') is not None else "—",
-                            'מחיר מכירה': f"{sym}{_sale_p:,.2f}",
-                            'תמורה': f"{sym}{_proceeds:,.2f}",
-                            'רווח/הפסד': _pnl_str,
-                        })
-                    
-                    if hist_rows:
-                        st.dataframe(pd.DataFrame(hist_rows), hide_index=True, use_container_width=True)
-                        
-                        # סיכום כולל — רווח/הפסד ממומש בלבד
-                        _pnl_color_usd = "🟢" if total_realized_pnl_usd >= 0 else "🔴"
-                        hc1, hc2 = st.columns(2)
-                        hc1.metric(f"{_pnl_color_usd} רווח/הפסד ממומש ($)", f"${total_realized_pnl_usd:+,.2f}")
-                        hc2.metric("📊 עסקאות", f"{len(executed_history)}")
-                        if total_realized_pnl_ils != 0:
-                            _pnl_color_ils = "🟢" if total_realized_pnl_ils >= 0 else "🔴"
-                            hc3, hc4 = st.columns(2)
-                            hc3.metric(f"{_pnl_color_ils} רווח/הפסד ממומש (₪)", f"₪{total_realized_pnl_ils:+,.2f}")
-                            hc4.metric("", "")
-        except Exception as e:
-            st.error(f"⚠️ שגיאה בסקציית סטופ: {e}")
-        
+                            _ex_date_str = f"{_date_fmt} (עבר)"
+                    except Exception:
+                        pass
+                if _pay_ts:
+                    try:
+                        _pay_dt = datetime.fromtimestamp(_pay_ts)
+                        _pdays = (_pay_dt - datetime.now()).days
+                        _pay_fmt = _pay_dt.strftime('%d/%m/%Y')
+                        if _pdays > 0:
+                            _pay_date_str = f"{_pay_fmt} (בעוד {_pdays} ימים)"
+                        elif _pdays == 0:
+                            _pay_date_str = f"{_pay_fmt} (היום!)"
+                        else:
+                            _pay_date_str = f"{_pay_fmt} (עבר)"
+                    except Exception:
+                        pass
 
-        st.divider()
+                div_rows.append({
+                    'שם': info['name'],
+                    'טיקר': ticker,
+                    'Yield (%)': actual_yield,
+                    'דיבידנד שנתי למניה ($)': div_per_share,
+                    'הכנסה שנתית ($)': annual_income,
+                    'הכנסה שנתית (₪)': annual_income * usd_to_ils,
+                    'Ex-Dividend': _ex_date_str,
+                    'תאריך תשלום': _pay_date_str,
+                })
 
-        # ==================== הכנסה פסיבית מדיבידנדים ====================
-        st.subheader("💰 הכנסה פסיבית מדיבידנדים")
+            if div_rows:
+                div_df = pd.DataFrame(div_rows).sort_values('הכנסה שנתית ($)', ascending=False)
 
-        # ערכי seed בלבד — ישמשו fallback לנכסים שלא עודכנו עדיין מה-API
-        _seed_dividends = {
-            "IEFA":   3.178,
-            "IEMG":   1.849,
-            "MSFT":   3.56,
-            "SFL":    0.47,
-            "BKR":    0.92,
-            "NVDA":   0.04,
-            "LIN":    6.10,
-            "PPA":    0.656,
-        }
+                weighted_yield = (total_annual_div_usd / total_value * 100) if total_value > 0 else 0
+                annual_ils = total_annual_div_usd * usd_to_ils
+                monthly_ils = annual_ils / 12
 
-        # רשימת כל הטיקרים הנוכחיים בתיק (US בלבד — לא ישראליים ולא מזומן)
-        _current_us_tickers = tuple(t for t in portfolio if t not in israeli_stocks)
+                dcol1, dcol2, dcol3, dcol4 = st.columns(4)
+                dcol1.metric("🎯 Yield משוקלל של התיק", f"{weighted_yield:.2f}%")
+                dcol2.metric("💵 הכנסה שנתית ($)", f"${total_annual_div_usd:,.2f}")
+                dcol3.metric("💰 הכנסה שנתית (₪)", f"₪{annual_ils:,.0f}")
+                dcol4.metric("📅 הכנסה חודשית (₪)", f"₪{monthly_ils:,.0f}")
 
-        # כפתור עדכון — שולח את כל הטיקרים הנוכחיים (לא רק ה-seed)
-        div_col1, div_col2 = st.columns([1, 4])
-        with div_col1:
-            update_div = st.button("🔄 עדכן דיבידנדים", help="משיכת נתוני דיבידנד עדכניים מ-yfinance (לוקח ~30 שניות)")
+                st.dataframe(
+                    div_df.style.format({
+                        'Yield (%)': '{:.2f}%',
+                        'דיבידנד שנתי למניה ($)': '${:.4f}',
+                        'הכנסה שנתית ($)': '${:,.2f}',
+                        'הכנסה שנתית (₪)': '₪{:,.0f}',
+                    }),
+                    width='stretch'
+                )
 
-        if update_div:
-            with st.spinner("⏳ מושך נתוני דיבידנד עדכניים..."):
-                fetch_live_dividends.clear()
-                fetch_notification_data.clear()
-                live = fetch_live_dividends(_current_us_tickers)
-                _live_notifications = fetch_notification_data(_current_us_tickers)
-            if live:
-                _new_dividend_snapshot = {
-                    "rates": live,
-                    "notifications": {
-                        ticker: {
-                            "ex_div_date": details.get("ex_div_date"),
-                            "div_date": details.get("div_date"),
-                        }
-                        for ticker, details in _live_notifications.items()
-                    },
-                    "tickers": list(_current_us_tickers),
-                    "updated_at": datetime.now().isoformat(timespec="seconds"),
-                    "source": "yfinance",
-                }
-                if db.save_dividend_snapshot(_new_dividend_snapshot):
-                    with div_col2:
-                        st.success(f"✅ נשמרו נתוני דיבידנד עבור {len(live)} נכסים.")
-                else:
-                    with div_col2:
-                        st.error("הנתונים נמשכו אך השמירה נכשלה; הטבלה הקודמת נשארה זמינה.")
+                # הערה דינמית — מחשב בזמן אמת אילו נכסים לא מחלקים דיבידנד
+                _div_paying = {t for t in known_dividends if known_dividends[t] > 0 and t in portfolio}
+                _non_div = [t for t in _current_us_tickers if t not in _div_paying]
+                if _non_div:
+                    _non_div_names = ", ".join(
+                        portfolio[t]['name'] for t in _non_div[:8]
+                    ) + ("..." if len(_non_div) > 8 else "")
+                    st.caption(f"ℹ️ {len(_non_div)} נכסים בתיק לא מחלקים דיבידנד: {_non_div_names}.")
+                st.caption("💡 לחץ '🔄 עדכן דיבידנדים' לקבלת נתונים עדכניים מ-yfinance עבור כל הנכסים הנוכחיים בתיק.")
+                _div_updated_at = _dividend_snapshot.get('updated_at')
+                if _div_updated_at:
+                    st.caption(f"עדכון אחרון שנשמר: {_div_updated_at}")
+                st.caption("ℹ️ הטבלה היא למעקב בלבד. קבלת דיבידנד אינה משנה מזומן אוטומטית; הפקדה מתבצעת ידנית בסרגל הצד.")
+
             else:
-                with div_col2:
-                    st.warning("⚠️ לא הצליח לעדכן")
+                st.info("לא נמצאו נכסים מחלקי דיבידנד בתיק.")
 
-        # בנה known_dividends:
-        # 1. seed רק לנכסים שעדיין בתיק
-        # 2. live data שנשמרה ב-DB בעדיפות (לא נדרש רענון בכל פעם)
-        _base_div = {k: v for k, v in _seed_dividends.items() if k in portfolio}
-        _dividend_snapshot = db.get_dividend_snapshot() or {}
-        if not isinstance(_dividend_snapshot, dict):
-            _dividend_snapshot = {}
-        _saved_live_divs = _dividend_snapshot.get('rates', {})
-        # תאימות לנתונים שנשמרו בעבר בתוך מצב המזומן — ללא שינוי או מחיקה שלהם.
-        if not _saved_live_divs:
-            _saved_live_divs = _saved_deposits.get('saved_dividends', {})
-        if _saved_live_divs:
-            _live_for_portfolio = {k: v for k, v in _saved_live_divs.items() if k in portfolio}
-            known_dividends = {**_base_div, **_live_for_portfolio}
-        else:
-            known_dividends = _base_div
+            # ==================== השוואה מול השוק ====================
+            st.subheader("📈 האם ניצחתי את השוק?")
 
-        div_rows = []
-        total_annual_div_usd = 0
+            try:
+                # === חלק 1: תשואה כוללת מבוססת Cost Basis (תמיד עובד!) ===
+                st.markdown("#### 🏦 תשואה כוללת מאז הרכישה")
 
-        # תאריכי Ex/תשלום מגיעים מה-snapshot השמור ומתעדכנים רק בלחיצה.
-        _div_notif = _dividend_snapshot.get('notifications', {})
+                # חישוב עלות ושווי נוכחי של כל התיק
+                total_cost_usd = 0.0
+                total_value_usd = 0.0
+                ticker_returns = []
 
-        for ticker, div_per_share in known_dividends.items():
-            if div_per_share <= 0:
-                continue
-            asset_row = df[df['Ticker'] == ticker]
-            if asset_row.empty:
-                continue
+                usd_ils = get_usd_to_ils()
 
-            price = float(asset_row['Price'].iloc[0])
-            qty = portfolio[ticker]['qty']
-            info = portfolio[ticker]
+                # מניות אמריקאיות
+                for ticker, info in portfolio.items():
+                    cb = cost_basis.get(ticker)
+                    if cb and cb['currency'] == 'USD':
+                        buy_price = cb['price']
+                        qty = info['qty']
+                        cost = buy_price * qty
+                        # מחיר נוכחי מה-DataFrame שכבר נטען
+                        current_row = df[df['Ticker'] == ticker]
+                        if not current_row.empty:
+                            current_price = float(current_row['Price'].iloc[0])
+                            value = current_price * qty
+                            pnl_pct = (current_price - buy_price) / buy_price * 100
+                            total_cost_usd += cost
+                            total_value_usd += value
+                            ticker_returns.append({
+                                'נכס': f"{info['name']} ({ticker})",
+                                'עלות ($)': cost,
+                                'שווי נוכחי ($)': value,
+                                'תשואה %': pnl_pct,
+                                'רווח/הפסד ($)': value - cost,
+                                'משקל בתיק %': 0  # ימולא אחרי
+                            })
 
-            annual_income = div_per_share * qty
-            actual_yield = div_per_share / price * 100 if price > 0 else 0
+                # מניות ישראליות (המרה לדולר)
+                for il_ticker, il_info in israeli_stocks.items():
+                    cb = cost_basis.get(il_ticker)
+                    if cb and cb['currency'] == 'ILS' and il_ticker not in ('CASH_USD', 'CASH_ILS'):
+                        buy_price_ils = cb['price']
+                        qty = il_info['qty']
+                        cost_ils = buy_price_ils * qty
+                        current_price_ils = il_info['default_price_ils']
+                        value_ils = current_price_ils * qty
+                        pnl_pct = (current_price_ils - buy_price_ils) / buy_price_ils * 100
 
-            total_annual_div_usd += annual_income
-
-            # תאריך Ex-Dividend ותאריך תשלום
-            _ex_date_str  = "לא ידוע"
-            _pay_date_str = "לא ידוע"
-            _ex_ts  = _div_notif.get(ticker, {}).get('ex_div_date')
-            _pay_ts = _div_notif.get(ticker, {}).get('div_date')
-            if _ex_ts:
-                try:
-                    _ex_dt = datetime.fromtimestamp(_ex_ts)
-                    _days = (_ex_dt - datetime.now()).days
-                    _date_fmt = _ex_dt.strftime('%d/%m/%Y')
-                    if _days > 0:
-                        _ex_date_str = f"{_date_fmt} (בעוד {_days} ימים)"
-                    elif _days == 0:
-                        _ex_date_str = f"{_date_fmt} (היום!)"
-                    else:
-                        _ex_date_str = f"{_date_fmt} (עבר)"
-                except Exception:
-                    pass
-            if _pay_ts:
-                try:
-                    _pay_dt = datetime.fromtimestamp(_pay_ts)
-                    _pdays = (_pay_dt - datetime.now()).days
-                    _pay_fmt = _pay_dt.strftime('%d/%m/%Y')
-                    if _pdays > 0:
-                        _pay_date_str = f"{_pay_fmt} (בעוד {_pdays} ימים)"
-                    elif _pdays == 0:
-                        _pay_date_str = f"{_pay_fmt} (היום!)"
-                    else:
-                        _pay_date_str = f"{_pay_fmt} (עבר)"
-                except Exception:
-                    pass
-
-            div_rows.append({
-                'שם': info['name'],
-                'טיקר': ticker,
-                'Yield (%)': actual_yield,
-                'דיבידנד שנתי למניה ($)': div_per_share,
-                'הכנסה שנתית ($)': annual_income,
-                'הכנסה שנתית (₪)': annual_income * usd_to_ils,
-                'Ex-Dividend': _ex_date_str,
-                'תאריך תשלום': _pay_date_str,
-            })
-
-        if div_rows:
-            div_df = pd.DataFrame(div_rows).sort_values('הכנסה שנתית ($)', ascending=False)
-
-            weighted_yield = (total_annual_div_usd / total_value * 100) if total_value > 0 else 0
-            annual_ils = total_annual_div_usd * usd_to_ils
-            monthly_ils = annual_ils / 12
-
-            dcol1, dcol2, dcol3, dcol4 = st.columns(4)
-            dcol1.metric("🎯 Yield משוקלל של התיק", f"{weighted_yield:.2f}%")
-            dcol2.metric("💵 הכנסה שנתית ($)", f"${total_annual_div_usd:,.2f}")
-            dcol3.metric("💰 הכנסה שנתית (₪)", f"₪{annual_ils:,.0f}")
-            dcol4.metric("📅 הכנסה חודשית (₪)", f"₪{monthly_ils:,.0f}")
-
-            st.dataframe(
-                div_df.style.format({
-                    'Yield (%)': '{:.2f}%',
-                    'דיבידנד שנתי למניה ($)': '${:.4f}',
-                    'הכנסה שנתית ($)': '${:,.2f}',
-                    'הכנסה שנתית (₪)': '₪{:,.0f}',
-                }),
-                width='stretch'
-            )
-
-            # הערה דינמית — מחשב בזמן אמת אילו נכסים לא מחלקים דיבידנד
-            _div_paying = {t for t in known_dividends if known_dividends[t] > 0 and t in portfolio}
-            _non_div = [t for t in _current_us_tickers if t not in _div_paying]
-            if _non_div:
-                _non_div_names = ", ".join(
-                    portfolio[t]['name'] for t in _non_div[:8]
-                ) + ("..." if len(_non_div) > 8 else "")
-                st.caption(f"ℹ️ {len(_non_div)} נכסים בתיק לא מחלקים דיבידנד: {_non_div_names}.")
-            st.caption("💡 לחץ '🔄 עדכן דיבידנדים' לקבלת נתונים עדכניים מ-yfinance עבור כל הנכסים הנוכחיים בתיק.")
-            _div_updated_at = _dividend_snapshot.get('updated_at')
-            if _div_updated_at:
-                st.caption(f"עדכון אחרון שנשמר: {_div_updated_at}")
-            st.caption("ℹ️ הטבלה היא למעקב בלבד. קבלת דיבידנד אינה משנה מזומן אוטומטית; הפקדה מתבצעת ידנית בסרגל הצד.")
-
-        else:
-            st.info("לא נמצאו נכסים מחלקי דיבידנד בתיק.")
-
-        # ==================== השוואה מול השוק ====================
-        st.subheader("📈 האם ניצחתי את השוק?")
-        
-        try:
-            # === חלק 1: תשואה כוללת מבוססת Cost Basis (תמיד עובד!) ===
-            st.markdown("#### 🏦 תשואה כוללת מאז הרכישה")
-            
-            # חישוב עלות ושווי נוכחי של כל התיק
-            total_cost_usd = 0.0
-            total_value_usd = 0.0
-            ticker_returns = []
-            
-            usd_ils = get_usd_to_ils()
-            
-            # מניות אמריקאיות
-            for ticker, info in portfolio.items():
-                cb = cost_basis.get(ticker)
-                if cb and cb['currency'] == 'USD':
-                    buy_price = cb['price']
-                    qty = info['qty']
-                    cost = buy_price * qty
-                    # מחיר נוכחי מה-DataFrame שכבר נטען
-                    current_row = df[df['Ticker'] == ticker]
-                    if not current_row.empty:
-                        current_price = float(current_row['Price'].iloc[0])
-                        value = current_price * qty
-                        pnl_pct = (current_price - buy_price) / buy_price * 100
-                        total_cost_usd += cost
-                        total_value_usd += value
+                        cost_usd = cost_ils / usd_ils
+                        value_usd = value_ils / usd_ils
+                        total_cost_usd += cost_usd
+                        total_value_usd += value_usd
                         ticker_returns.append({
-                            'נכס': f"{info['name']} ({ticker})",
-                            'עלות ($)': cost,
-                            'שווי נוכחי ($)': value,
+                            'נכס': f"{il_info['name']} ({il_ticker})",
+                            'עלות ($)': cost_usd,
+                            'שווי נוכחי ($)': value_usd,
                             'תשואה %': pnl_pct,
-                            'רווח/הפסד ($)': value - cost,
-                            'משקל בתיק %': 0  # ימולא אחרי
+                            'רווח/הפסד ($)': value_usd - cost_usd,
+                            'משקל בתיק %': 0
                         })
-            
-            # מניות ישראליות (המרה לדולר)
-            for il_ticker, il_info in israeli_stocks.items():
-                cb = cost_basis.get(il_ticker)
-                if cb and cb['currency'] == 'ILS' and il_ticker not in ('CASH_USD', 'CASH_ILS'):
-                    buy_price_ils = cb['price']
-                    qty = il_info['qty']
-                    cost_ils = buy_price_ils * qty
-                    current_price_ils = il_info['default_price_ils']
-                    value_ils = current_price_ils * qty
-                    pnl_pct = (current_price_ils - buy_price_ils) / buy_price_ils * 100
-                    
-                    cost_usd = cost_ils / usd_ils
-                    value_usd = value_ils / usd_ils
-                    total_cost_usd += cost_usd
-                    total_value_usd += value_usd
-                    ticker_returns.append({
-                        'נכס': f"{il_info['name']} ({il_ticker})",
-                        'עלות ($)': cost_usd,
-                        'שווי נוכחי ($)': value_usd,
-                        'תשואה %': pnl_pct,
-                        'רווח/הפסד ($)': value_usd - cost_usd,
-                        'משקל בתיק %': 0
-                    })
-            
-            # אותו חישוב מזומן קנוני שמשמש בטבלה הראשית.
-            cash_usd = _cash_balance_usd(
-                base_cash_usd=israeli_stocks.get('CASH_USD', {}).get('qty', 0),
-                cash_state=_saved_deposits,
-                purchase_deductions_usd=_purchase_deductions_usd,
-                usd_to_ils=usd_ils,
-            )
-            total_cost_usd += cash_usd
-            total_value_usd += cash_usd
-            
-            # חישוב תשואת התיק הכוללת
-            my_total_return = ((total_value_usd - total_cost_usd) / total_cost_usd) * 100 if total_cost_usd > 0 else 0
-            my_total_pnl = total_value_usd - total_cost_usd
-            
-            # עדכון משקלות
-            for tr in ticker_returns:
-                tr['משקל בתיק %'] = (tr['שווי נוכחי ($)'] / total_value_usd * 100) if total_value_usd > 0 else 0
-            
-            # KPIs ראשיים
-            kcol1, kcol2, kcol3, kcol4 = st.columns(4)
-            kcol1.metric("💰 סה\"כ עלות", f"${total_cost_usd:,.0f}")
-            kcol2.metric("📊 שווי נוכחי", f"${total_value_usd:,.0f}")
-            kcol3.metric("📈 תשואה כוללת", f"{my_total_return:+.2f}%")
-            kcol4.metric("💵 רווח/הפסד", f"${my_total_pnl:+,.0f}")
-            
-            # טבלת תשואה לכל נכס
-            if ticker_returns:
-                returns_df = pd.DataFrame(ticker_returns).sort_values('תשואה %', ascending=False)
-                returns_df['עלות ($)'] = returns_df['עלות ($)'].map(lambda x: f"${x:,.0f}")
-                returns_df['שווי נוכחי ($)'] = returns_df['שווי נוכחי ($)'].map(lambda x: f"${x:,.0f}")
-                returns_df['רווח/הפסד ($)'] = returns_df['רווח/הפסד ($)'].map(lambda x: f"${x:+,.0f}")
-                returns_df['תשואה %'] = returns_df['תשואה %'].map(lambda x: f"{x:+.2f}%")
-                returns_df['משקל בתיק %'] = returns_df['משקל בתיק %'].map(lambda x: f"{x:.1f}%")
-                st.dataframe(returns_df, use_container_width=True, hide_index=True)
-            
-            st.markdown("---")
-            
-            # === חלק 2: השוואה מנורמלת מול מדדים (גרף) ===
-            st.markdown("#### 📉 ביצועים מול מדדים לאורך זמן")
-            
-            period_choice = st.selectbox("בחר תקופה להשוואה:", 
-                                         ["1mo", "3mo", "6mo", "1y", "2y", "5y"],
-                                         index=3,
-                                         format_func=lambda x: {"1mo": "חודש", "3mo": "3 חודשים", "6mo": "6 חודשים", "1y": "שנה", "2y": "שנתיים", "5y": "5 שנים"}[x])
-            
-            # משיכת נתוני מדדים
-            spy_hist = yf.Ticker("SPY").history(period=period_choice)
-            vt_hist = yf.Ticker("VT").history(period=period_choice)
-            
-            # חישוב ביצועי התיק - רק טיקרים שעובדים
-            portfolio_daily = pd.DataFrame()
-            working_tickers = []
-            failed_tickers = []
-            for ticker, info in portfolio.items():
-                try:
-                    hist = yf.Ticker(ticker).history(period=period_choice)
-                    if not hist.empty and len(hist) > 1:
-                        portfolio_daily[ticker] = hist['Close'] * info['qty']
-                        working_tickers.append(ticker)
-                    else:
+
+                # אותו חישוב מזומן קנוני שמשמש בטבלה הראשית.
+                cash_usd = _cash_balance_usd(
+                    base_cash_usd=israeli_stocks.get('CASH_USD', {}).get('qty', 0),
+                    cash_state=_saved_deposits,
+                    purchase_deductions_usd=_purchase_deductions_usd,
+                    usd_to_ils=usd_ils,
+                )
+                total_cost_usd += cash_usd
+                total_value_usd += cash_usd
+
+                # חישוב תשואת התיק הכוללת
+                my_total_return = ((total_value_usd - total_cost_usd) / total_cost_usd) * 100 if total_cost_usd > 0 else 0
+                my_total_pnl = total_value_usd - total_cost_usd
+
+                # עדכון משקלות
+                for tr in ticker_returns:
+                    tr['משקל בתיק %'] = (tr['שווי נוכחי ($)'] / total_value_usd * 100) if total_value_usd > 0 else 0
+
+                # KPIs ראשיים
+                kcol1, kcol2, kcol3, kcol4 = st.columns(4)
+                kcol1.metric("💰 סה\"כ עלות", f"${total_cost_usd:,.0f}")
+                kcol2.metric("📊 שווי נוכחי", f"${total_value_usd:,.0f}")
+                kcol3.metric("📈 תשואה כוללת", f"{my_total_return:+.2f}%")
+                kcol4.metric("💵 רווח/הפסד", f"${my_total_pnl:+,.0f}")
+
+                # טבלת תשואה לכל נכס
+                if ticker_returns:
+                    returns_df = pd.DataFrame(ticker_returns).sort_values('תשואה %', ascending=False)
+                    returns_df['עלות ($)'] = returns_df['עלות ($)'].map(lambda x: f"${x:,.0f}")
+                    returns_df['שווי נוכחי ($)'] = returns_df['שווי נוכחי ($)'].map(lambda x: f"${x:,.0f}")
+                    returns_df['רווח/הפסד ($)'] = returns_df['רווח/הפסד ($)'].map(lambda x: f"${x:+,.0f}")
+                    returns_df['תשואה %'] = returns_df['תשואה %'].map(lambda x: f"{x:+.2f}%")
+                    returns_df['משקל בתיק %'] = returns_df['משקל בתיק %'].map(lambda x: f"{x:.1f}%")
+                    st.dataframe(returns_df, use_container_width=True, hide_index=True)
+
+                st.markdown("---")
+
+                # === חלק 2: השוואה מנורמלת מול מדדים (גרף) ===
+                st.markdown("#### 📉 ביצועים מול מדדים לאורך זמן")
+
+                period_choice = st.selectbox("בחר תקופה להשוואה:",
+                                             ["1mo", "3mo", "6mo", "1y", "2y", "5y"],
+                                             index=3,
+                                             format_func=lambda x: {"1mo": "חודש", "3mo": "3 חודשים", "6mo": "6 חודשים", "1y": "שנה", "2y": "שנתיים", "5y": "5 שנים"}[x])
+
+                # משיכת נתוני מדדים
+                spy_hist = yf.Ticker("SPY").history(period=period_choice)
+                vt_hist = yf.Ticker("VT").history(period=period_choice)
+
+                # חישוב ביצועי התיק - רק טיקרים שעובדים
+                portfolio_daily = pd.DataFrame()
+                working_tickers = []
+                failed_tickers = []
+                for ticker, info in portfolio.items():
+                    try:
+                        hist = yf.Ticker(ticker).history(period=period_choice)
+                        if not hist.empty and len(hist) > 1:
+                            portfolio_daily[ticker] = hist['Close'] * info['qty']
+                            working_tickers.append(ticker)
+                        else:
+                            failed_tickers.append(ticker)
+                    except:
                         failed_tickers.append(ticker)
-                except:
-                    failed_tickers.append(ticker)
-            
-            if not portfolio_daily.empty and not spy_hist.empty:
-                # חישוב שווי תיק יומי (ללא dropna - נמלא חסרים)
-                portfolio_daily = portfolio_daily.ffill().bfill()
-                portfolio_total = portfolio_daily.sum(axis=1)
-                
-                # נרמול ל-100
-                portfolio_norm = (portfolio_total / portfolio_total.iloc[0]) * 100
-                spy_norm = (spy_hist['Close'] / spy_hist['Close'].iloc[0]) * 100
-                
-                # יצירת DataFrame משולב - reindex לפי תאריכי SPY (המדד האמין ביותר)
-                comparison = pd.DataFrame(index=spy_norm.index)
-                comparison['S&P 500 (SPY)'] = spy_norm
-                
-                # יישור התיק לאותם תאריכים
-                portfolio_reindexed = portfolio_norm.reindex(comparison.index, method='nearest')
-                comparison['התיק שלי'] = portfolio_reindexed
-                
-                if not vt_hist.empty:
-                    vt_norm = (vt_hist['Close'] / vt_hist['Close'].iloc[0]) * 100
-                    vt_reindexed = vt_norm.reindex(comparison.index, method='nearest')
-                    comparison['עולמי (VT)'] = vt_reindexed
-                
-                comparison = comparison.dropna()
-                
-                if not comparison.empty:
-                    # חישוב תשואות לתקופה
-                    period_my_return = comparison['התיק שלי'].iloc[-1] - 100
-                    period_spy_return = comparison['S&P 500 (SPY)'].iloc[-1] - 100
-                    period_vt_return = comparison['עולמי (VT)'].iloc[-1] - 100 if 'עולמי (VT)' in comparison.columns else None
-                    
-                    # KPIs של השוואה
-                    pcol1, pcol2, pcol3 = st.columns(3)
-                    pcol1.metric("📊 התיק שלי (תקופה)", f"{period_my_return:+.2f}%")
-                    pcol2.metric("🇺🇸 S&P 500", f"{period_spy_return:+.2f}%", 
-                                delta=f"{'ניצחת! 🎉' if period_my_return > period_spy_return else 'פיגור'} ({period_my_return - period_spy_return:+.2f}%)")
-                    if period_vt_return is not None:
-                        pcol3.metric("🌍 עולמי (VT)", f"{period_vt_return:+.2f}%",
-                                    delta=f"{'ניצחת! 🎉' if period_my_return > period_vt_return else 'פיגור'} ({period_my_return - period_vt_return:+.2f}%)")
-                    
-                    # גרף השוואה מנורמל
-                    import plotly.graph_objects as go
-                    fig_compare = go.Figure()
-                    fig_compare.add_trace(go.Scatter(x=comparison.index, y=comparison['התיק שלי'], 
-                                                      name='התיק שלי', line=dict(color='#00cc96', width=3)))
-                    fig_compare.add_trace(go.Scatter(x=comparison.index, y=comparison['S&P 500 (SPY)'], 
-                                                      name='S&P 500', line=dict(color='#636efa', width=2, dash='dash')))
-                    if 'עולמי (VT)' in comparison.columns:
-                        fig_compare.add_trace(go.Scatter(x=comparison.index, y=comparison['עולמי (VT)'], 
-                                                          name='עולמי (VT)', line=dict(color='#ef553b', width=2, dash='dot')))
-                    
-                    fig_compare.add_hline(y=100, line_dash="solid", line_color="gray", opacity=0.4, 
-                                           annotation_text="נקודת התחלה (100)")
-                    fig_compare.update_layout(
-                        title=f"ביצועים מנורמלים - התיק שלי מול השוק ({period_choice})",
-                        yaxis_title="ביצועים מנורמלים (בסיס=100)",
-                        xaxis_title="תאריך",
-                        hovermode="x unified",
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                    )
-                    st.plotly_chart(fig_compare, width='stretch')
-                    
-                    # הודעת סיכום
-                    if period_my_return > period_spy_return and (period_vt_return is None or period_my_return > period_vt_return):
-                        st.success(f"🏆 מזל טוב! ניצחת את השוק בתקופה הנבחרת! התיק שלך עלה {period_my_return:+.2f}% לעומת S&P 500 {period_spy_return:+.2f}%")
-                    elif period_my_return > period_spy_return:
-                        st.info(f"👍 ניצחת את ה-S&P 500 ({period_my_return:+.2f}% vs {period_spy_return:+.2f}%), אך פיגרת אחרי המדד העולמי ({period_vt_return:+.2f}%)")
+
+                if not portfolio_daily.empty and not spy_hist.empty:
+                    # חישוב שווי תיק יומי (ללא dropna - נמלא חסרים)
+                    portfolio_daily = portfolio_daily.ffill().bfill()
+                    portfolio_total = portfolio_daily.sum(axis=1)
+
+                    # נרמול ל-100
+                    portfolio_norm = (portfolio_total / portfolio_total.iloc[0]) * 100
+                    spy_norm = (spy_hist['Close'] / spy_hist['Close'].iloc[0]) * 100
+
+                    # יצירת DataFrame משולב - reindex לפי תאריכי SPY (המדד האמין ביותר)
+                    comparison = pd.DataFrame(index=spy_norm.index)
+                    comparison['S&P 500 (SPY)'] = spy_norm
+
+                    # יישור התיק לאותם תאריכים
+                    portfolio_reindexed = portfolio_norm.reindex(comparison.index, method='nearest')
+                    comparison['התיק שלי'] = portfolio_reindexed
+
+                    if not vt_hist.empty:
+                        vt_norm = (vt_hist['Close'] / vt_hist['Close'].iloc[0]) * 100
+                        vt_reindexed = vt_norm.reindex(comparison.index, method='nearest')
+                        comparison['עולמי (VT)'] = vt_reindexed
+
+                    comparison = comparison.dropna()
+
+                    if not comparison.empty:
+                        # חישוב תשואות לתקופה
+                        period_my_return = comparison['התיק שלי'].iloc[-1] - 100
+                        period_spy_return = comparison['S&P 500 (SPY)'].iloc[-1] - 100
+                        period_vt_return = comparison['עולמי (VT)'].iloc[-1] - 100 if 'עולמי (VT)' in comparison.columns else None
+
+                        # KPIs של השוואה
+                        pcol1, pcol2, pcol3 = st.columns(3)
+                        pcol1.metric("📊 התיק שלי (תקופה)", f"{period_my_return:+.2f}%")
+                        pcol2.metric("🇺🇸 S&P 500", f"{period_spy_return:+.2f}%",
+                                    delta=f"{'ניצחת! 🎉' if period_my_return > period_spy_return else 'פיגור'} ({period_my_return - period_spy_return:+.2f}%)")
+                        if period_vt_return is not None:
+                            pcol3.metric("🌍 עולמי (VT)", f"{period_vt_return:+.2f}%",
+                                        delta=f"{'ניצחת! 🎉' if period_my_return > period_vt_return else 'פיגור'} ({period_my_return - period_vt_return:+.2f}%)")
+
+                        # גרף השוואה מנורמל
+                        import plotly.graph_objects as go
+                        fig_compare = go.Figure()
+                        fig_compare.add_trace(go.Scatter(x=comparison.index, y=comparison['התיק שלי'],
+                                                          name='התיק שלי', line=dict(color='#00cc96', width=3)))
+                        fig_compare.add_trace(go.Scatter(x=comparison.index, y=comparison['S&P 500 (SPY)'],
+                                                          name='S&P 500', line=dict(color='#636efa', width=2, dash='dash')))
+                        if 'עולמי (VT)' in comparison.columns:
+                            fig_compare.add_trace(go.Scatter(x=comparison.index, y=comparison['עולמי (VT)'],
+                                                              name='עולמי (VT)', line=dict(color='#ef553b', width=2, dash='dot')))
+
+                        fig_compare.add_hline(y=100, line_dash="solid", line_color="gray", opacity=0.4,
+                                               annotation_text="נקודת התחלה (100)")
+                        fig_compare.update_layout(
+                            title=f"ביצועים מנורמלים - התיק שלי מול השוק ({period_choice})",
+                            yaxis_title="ביצועים מנורמלים (בסיס=100)",
+                            xaxis_title="תאריך",
+                            hovermode="x unified",
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        )
+                        st.plotly_chart(fig_compare, width='stretch')
+
+                        # הודעת סיכום
+                        if period_my_return > period_spy_return and (period_vt_return is None or period_my_return > period_vt_return):
+                            st.success(f"🏆 מזל טוב! ניצחת את השוק בתקופה הנבחרת! התיק שלך עלה {period_my_return:+.2f}% לעומת S&P 500 {period_spy_return:+.2f}%")
+                        elif period_my_return > period_spy_return:
+                            st.info(f"👍 ניצחת את ה-S&P 500 ({period_my_return:+.2f}% vs {period_spy_return:+.2f}%), אך פיגרת אחרי המדד העולמי ({period_vt_return:+.2f}%)")
+                        else:
+                            diff = period_spy_return - period_my_return
+                            st.warning(f"📉 התיק שלך פיגר אחרי ה-S&P 500 ב-{diff:.2f}% בתקופה הנבחרת. שקול לבדוק את ההקצאה.")
+
+                        if failed_tickers:
+                            st.caption(f"ℹ️ הגרף לא כולל: {', '.join(failed_tickers)} (אין נתוני היסטוריה)")
                     else:
-                        diff = period_spy_return - period_my_return
-                        st.warning(f"📉 התיק שלך פיגר אחרי ה-S&P 500 ב-{diff:.2f}% בתקופה הנבחרת. שקול לבדוק את ההקצאה.")
-                    
-                    if failed_tickers:
-                        st.caption(f"ℹ️ הגרף לא כולל: {', '.join(failed_tickers)} (אין נתוני היסטוריה)")
+                        st.info("ℹ️ אין נתוני היסטוריה משותפים לגרף, אבל התשואה הכוללת למעלה מחושבת מנתוני הקנייה והמחיר הנוכחי.")
                 else:
-                    st.info("ℹ️ אין נתוני היסטוריה משותפים לגרף, אבל התשואה הכוללת למעלה מחושבת מנתוני הקנייה והמחיר הנוכחי.")
-            else:
-                st.info("ℹ️ לא ניתן ליצור גרף השוואה, אבל התשואה הכוללת למעלה מחושבת מנתוני הקנייה והמחיר הנוכחי.")
-        except Exception as e:
-            st.error(f"שגיאה בהשוואה מול השוק: {e}")
+                    st.info("ℹ️ לא ניתן ליצור גרף השוואה, אבל התשואה הכוללת למעלה מחושבת מנתוני הקנייה והמחיר הנוכחי.")
+            except Exception as e:
+                st.error(f"שגיאה בהשוואה מול השוק: {e}")
 
     except Exception as e:
         st.error(f"שגיאה במשיכת נתונים: {e}")
